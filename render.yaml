@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: staffify-referral-backend
+    env: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: staffify-referral-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: HUBSTAFF_API_TOKEN
+        sync: false
+      - key: HUBSTAFF_ORG_ID
+        value: "699143"
+      - key: HUBSTAFF_WEBHOOK_SECRET
+        sync: false
+      - key: QBO_CLIENT_ID
+        sync: false
+      - key: QBO_CLIENT_SECRET
+        sync: false
+      - key: QBO_REDIRECT_URI
+        sync: false
+      - key: QBO_REALM_ID
+        sync: false
+      - key: QBO_ACCESS_TOKEN
+        sync: false
+      - key: QBO_REFRESH_TOKEN
+        sync: false
+      - key: QBO_ENVIRONMENT
+        value: "production"
+      - key: BASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+  - type: web
+    name: staffify-referral-frontend
+    env: node
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+
+databases:
+  - name: staffify-referral-db
+    databaseName: staffify_referral
+    user: staffify
