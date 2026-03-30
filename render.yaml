@@ -1,7 +1,10 @@
 services:
+  # ---- Backend: FastAPI + Python ----
   - type: web
     name: staffify-referral-backend
     env: python
+    region: oregon
+    plan: starter
     buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -11,12 +14,18 @@ services:
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
+      - key: ALGORITHM
+        value: "HS256"
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "480"
+      # Hubstaff integration
       - key: HUBSTAFF_API_TOKEN
         sync: false
       - key: HUBSTAFF_ORG_ID
         value: "699143"
       - key: HUBSTAFF_WEBHOOK_SECRET
         sync: false
+      # QuickBooks Online integration
       - key: QBO_CLIENT_ID
         sync: false
       - key: QBO_CLIENT_SECRET
@@ -31,21 +40,30 @@ services:
         sync: false
       - key: QBO_ENVIRONMENT
         value: "production"
+      # URLs
       - key: BASE_URL
         sync: false
       - key: FRONTEND_URL
         sync: false
 
+  # ---- Frontend: React + Vite (static site) ----
   - type: web
     name: staffify-referral-frontend
     env: node
+    region: oregon
+    plan: starter
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: VITE_API_BASE_URL
+        sync: false
 
 databases:
+  # ---- PostgreSQL (free tier) ----
   - name: staffify-referral-db
     databaseName: staffify_referral
     user: staffify
+    region: oregon
+    plan: starter

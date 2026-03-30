@@ -1,7 +1,9 @@
-# Python
+# ---- Python / Backend ----
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
+.Python
 .env
 *.egg-info/
 dist/
@@ -9,18 +11,29 @@ build/
 .venv/
 venv/
 env/
+*.egg
 
-# Node
+# Alembic: keep env.py and script.py.mako, ignore generated versions
+# (Comment this out if you want to commit migrations to the repo)
+# alembic/versions/*.py
+
+# ---- Node / Frontend ----
 node_modules/
-dist/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+
+# ---- Misc ----
 .DS_Store
-
-# Alembic
-alembic/versions/*.py
-
-# IDE
-.vscode/
-.idea/
-
-# Logs
+Thumbs.db
 *.log
+*.swp
+*.swo
+.idea/
+.vscode/
+*.iml
+
+# ---- Render ----
+# render build artifacts
+.render-buildinfo.json

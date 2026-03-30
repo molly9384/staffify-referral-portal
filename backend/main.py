@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from database import engine, Base
-from routers import auth, clients, referrals, vas, credits, hubstaff, qbo
+from routers import auth, clients, referrals, vas, credits, hubstaff, qbo, dashboard
+from scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
@@ -13,8 +14,14 @@ async def lifespan(app: FastAPI):
     # Startup: create tables if they don't exist (dev convenience; use Alembic in prod)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Start the bi-weekly credit automation scheduler
+    start_scheduler()
+
     yield
+
     # Shutdown
+    stop_scheduler()
     await engine.dispose()
 
 
@@ -41,6 +48,7 @@ app.include_router(vas.router, tags=["Virtual Assistants"])
 app.include_router(credits.router, prefix="/api/credits", tags=["Credits"])
 app.include_router(hubstaff.router, tags=["Hubstaff"])
 app.include_router(qbo.router, prefix="/api/qbo", tags=["QuickBooks Online"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 
 
 @app.get("/health")

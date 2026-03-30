@@ -21,7 +21,7 @@ class HubstaffService:
     async def get_project_members(self, project_id: str) -> list:
         url = f"{HUBSTAFF_API_BASE}/projects/{project_id}/members"
         async with httpx.AsyncClient(timeout=30) as client:
-            response = client.get(url, headers=self.headers)
+            response = await client.get(url, headers=self.headers)
             response.raise_for_status()
             data = response.json()
             return data.get("members", [])
@@ -66,6 +66,22 @@ class HubstaffService:
                     break
 
         return all_activities
+
+    async def get_organization_members(self, organization_id: str) -> list:
+        """Fetch all members (users) for the organization."""
+        url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/members"
+        all_members = []
+        async with httpx.AsyncClient(timeout=30) as client:
+            while url:
+                response = await client.get(url, headers=self.headers)
+                response.raise_for_status()
+                data = response.json()
+                members = data.get("members", [])
+                all_members.extend(members)
+                pagination = data.get("pagination", {})
+                next_link = pagination.get("next_link")
+                url = next_link if next_link else None
+        return all_members
 
     async def get_projects(self, organization_id: str) -> list:
         """Fetch all projects for the org."""
