@@ -47,13 +47,12 @@ services:
         sync: false
 
   # ---- Frontend: React + Vite (static site) ----
-  - type: static
+  - type: web
     name: staffify-referral-frontend
+    env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     envVars:
-      - key: NODE_VERSION
-        value: "20"
       - key: VITE_API_BASE_URL
         sync: false
 
