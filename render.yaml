@@ -4,7 +4,7 @@ services:
     name: staffify-referral-backend
     env: python
     region: oregon
-    plan: starter
+    plan: free
     buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -53,4 +53,4 @@ databases:
     databaseName: staffify_referral
     user: staffify
     region: oregon
-    plan: starter
+    plan: free
