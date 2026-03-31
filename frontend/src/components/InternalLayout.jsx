@@ -65,11 +65,8 @@ export default function InternalLayout() {
       <aside className="w-64 flex-shrink-0 flex flex-col bg-white border-r border-gray-200">
         {/* Logo */}
         <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200">
-          <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
-            <span className="text-white text-sm font-bold">S</span>
-          </div>
+          <img src="/logo.png" alt="Staffify" className="h-6" />
           <div>
-            <p className="text-sm font-semibold text-gray-900">Staffify</p>
             <p className="text-xs text-gray-500">Referral Portal</p>
           </div>
         </div>

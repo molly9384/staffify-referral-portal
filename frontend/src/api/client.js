@@ -46,6 +46,15 @@ export const getMe = () =>
 export const changePassword = (data) =>
   apiClient.put('/auth/change-password', data).then((r) => r.data)
 
+export const forgotPassword = (email) =>
+  apiClient.post('/auth/forgot-password', { email }).then((r) => r.data)
+
+export const resetPassword = (data) =>
+  apiClient.post('/auth/reset-password', data).then((r) => r.data)
+
+export const updateProfile = (data) =>
+  apiClient.put('/auth/update-profile', data).then((r) => r.data)
+
 export const registerUser = (data) =>
   apiClient.post('/auth/register', data).then((r) => r.data)
 

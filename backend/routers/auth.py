@@ -1,5 +1,5 @@
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,7 @@ from auth import (
 from config import settings
 from database import get_db
 from models import User, UserRole
-from schemas import LoginRequest, Token, UserCreate, UserOut, ChangePasswordRequest
+from schemas import LoginRequest, Token, UserCreate, UserOut, ChangePasswordRequest, UpdateProfileRequest, ForgotPasswordRequest, ResetPasswordRequest
 
 router = APIRouter()
 
@@ -115,3 +115,109 @@ async def setup_admin(setup_key: str, db: AsyncSession = Depends(get_db)):
         db.add(admin)
         await db.commit()
         return {"message": "Admin user created with password ChangeMe123!"}
+
+
+@router.put("/update-profile")
+async def update_profile(
+    request: UpdateProfileRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if request.full_name:
+        current_user.full_name = request.full_name
+    if request.email:
+        # Check email not already taken
+        result = await db.execute(select(User).where(User.email == request.email, User.id != current_user.id))
+        if result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Email already in use")
+        current_user.email = request.email
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    import secrets
+    from datetime import timezone
+    from models import PasswordResetToken
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalar_one_or_none()
+    # Always return 200 to prevent email enumeration
+    if user:
+        token = secrets.token_urlsafe(32)
+        expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        reset_token = PasswordResetToken(user_id=user.id, token=token, expires_at=expires)
+        db.add(reset_token)
+        await db.commit()
+
+        # Send email via Resend
+        resend_key = os.environ.get("RESEND_API_KEY", "")
+        frontend_url = os.environ.get("FRONTEND_URL", "https://staffify-referral-frontend.onrender.com")
+        reset_url = f"{frontend_url}/#/reset-password?token={token}"
+        if resend_key:
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        "https://api.resend.com/emails",
+                        headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                        json={
+                            "from": "Staffify <hello@gostaffify.com>",
+                            "to": [user.email],
+                            "subject": "Reset your Staffify password",
+                            "html": f"""
+                            <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+                              <img src="https://staffify-referral-frontend.onrender.com/logo.png" alt="Staffify" style="height:40px;margin-bottom:24px;" />
+                              <h2 style="color:#111;font-size:20px;margin-bottom:8px;">Reset your password</h2>
+                              <p style="color:#555;font-size:14px;margin-bottom:24px;">
+                                Click the button below to reset your password. This link expires in 1 hour.
+                              </p>
+                              <a href="{reset_url}" style="display:inline-block;background:#1abde1;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">
+                                Reset Password
+                              </a>
+                              <p style="color:#999;font-size:12px;margin-top:24px;">
+                                If you didn't request this, you can safely ignore this email.
+                              </p>
+                            </div>
+                            """,
+                        },
+                    )
+            except Exception as e:
+                print(f"Email send failed: {e}")
+    return {"message": "If an account exists with that email, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password_endpoint(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    from datetime import timezone
+    from models import PasswordResetToken
+    result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token == request.token,
+            PasswordResetToken.used == False,
+        )
+    )
+    reset_token = result.scalar_one_or_none()
+    if not reset_token:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    if reset_token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Reset token has expired")
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    user_result = await db.execute(select(User).where(User.id == reset_token.user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    user.hashed_password = get_password_hash(request.new_password)
+    reset_token.used = True
+    await db.commit()
+    return {"message": "Password reset successfully"}

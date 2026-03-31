@@ -7,21 +7,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Primary: #2563EB (Tailwind blue-600)
         primary: {
-          50:  '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
-          950: '#172554',
+          50:  '#f0fbfe',
+          100: '#dcf6fc',
+          200: '#b9eef9',
+          300: '#7fe1f3',
+          400: '#3dcce8',
+          500: '#1abde1',
+          600: '#0e9dbe',
+          700: '#0e7d9a',
+          800: '#10647d',
+          900: '#115369',
+          950: '#0b3445',
         },
-        // Accent: #10B981 (Tailwind emerald-500)
         accent: {
           50:  '#ecfdf5',
           100: '#d1fae5',
@@ -37,7 +35,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['Montserrat', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
     },
   },
