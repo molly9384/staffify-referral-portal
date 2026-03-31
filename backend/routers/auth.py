@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,7 +11,7 @@ from auth import (
 )
 from config import settings
 from database import get_db
-from models import User
+from models import User, UserRole
 from schemas import LoginRequest, Token, UserCreate, UserOut
 
 router = APIRouter()
@@ -71,3 +72,31 @@ async def register(
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_active_user)):
     return current_user
+
+
+@router.post("/setup-admin")
+async def setup_admin(setup_key: str, db: AsyncSession = Depends(get_db)):
+    """One-time endpoint to create or reset the admin user. Requires ADMIN_SETUP_KEY env var."""
+    expected_key = os.environ.get("ADMIN_SETUP_KEY", "")
+    if not expected_key or setup_key != expected_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    result = await db.execute(select(User).where(User.email == "admin@gostaffify.com"))
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        existing.hashed_password = get_password_hash("ChangeMe123!")
+        existing.is_active = True
+        await db.commit()
+        return {"message": "Admin password reset to ChangeMe123!"}
+    else:
+        admin = User(
+            email="admin@gostaffify.com",
+            hashed_password=get_password_hash("ChangeMe123!"),
+            full_name="Staffify Admin",
+            role=UserRole.admin,
+            is_active=True,
+        )
+        db.add(admin)
+        await db.commit()
+        return {"message": "Admin user created with password ChangeMe123!"}

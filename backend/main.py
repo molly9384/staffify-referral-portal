@@ -10,14 +10,16 @@ from scheduler import start_scheduler, stop_scheduler
 
 
 async def create_admin_user():
-    """Create default admin user if no users exist."""
-    from sqlalchemy import select, text
+    """Create default admin user if they don't exist yet."""
+    from sqlalchemy import select
     from database import AsyncSessionLocal
     from models import User, UserRole
     from auth import get_password_hash
     try:
         async with AsyncSessionLocal() as session:
-            result = await session.execute(select(User).limit(1))
+            result = await session.execute(
+                select(User).where(User.email == "admin@gostaffify.com")
+            )
             if result.scalar_one_or_none() is None:
                 admin = User(
                     email="admin@gostaffify.com",
@@ -28,6 +30,7 @@ async def create_admin_user():
                 )
                 session.add(admin)
                 await session.commit()
+                print("Admin user created.")
     except Exception as e:
         print(f"Seed skipped: {e}")
 
