@@ -9,11 +9,37 @@ from routers import auth, clients, referrals, vas, credits, hubstaff, qbo, dashb
 from scheduler import start_scheduler, stop_scheduler
 
 
+async def create_admin_user():
+    """Create default admin user if no users exist."""
+    from sqlalchemy import select, text
+    from database import AsyncSessionLocal
+    from models import User, UserRole
+    from auth import get_password_hash
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(User).limit(1))
+            if result.scalar_one_or_none() is None:
+                admin = User(
+                    email="admin@gostaffify.com",
+                    hashed_password=get_password_hash("ChangeMe123!"),
+                    full_name="Staffify Admin",
+                    role=UserRole.admin,
+                    is_active=True,
+                )
+                session.add(admin)
+                await session.commit()
+    except Exception as e:
+        print(f"Seed skipped: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: create tables if they don't exist (dev convenience; use Alembic in prod)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Create admin user if none exists
+    await create_admin_user()
 
     # Start the bi-weekly credit automation scheduler
     start_scheduler()
