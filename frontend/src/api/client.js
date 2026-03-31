@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -26,9 +26,9 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
       localStorage.removeItem('user')
-      // Redirect to login without using React Router (safe from any context)
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+      // Use hash-based path for HashRouter compatibility
+      if (!window.location.hash.includes('/login')) {
+        window.location.href = '/#/login'
       }
     }
     return Promise.reject(error)

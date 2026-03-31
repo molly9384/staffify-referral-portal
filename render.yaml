@@ -19,6 +19,8 @@ services:
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "480"
       # Hubstaff integration
+      - key: PYTHON_VERSION
+        value: "3.11.9"
       - key: HUBSTAFF_API_TOKEN
         sync: false
       - key: HUBSTAFF_ORG_ID
