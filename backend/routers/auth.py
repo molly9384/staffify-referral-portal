@@ -166,7 +166,7 @@ async def forgot_password(
                         "https://api.resend.com/emails",
                         headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
                         json={
-                            "from": "Staffify <hello@gostaffify.com>",
+                            "from": "Staffify <onboarding@resend.dev>",
                             "to": [user.email],
                             "subject": "Reset your Staffify password",
                             "html": f"""
