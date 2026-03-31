@@ -11,6 +11,7 @@ import Referrals from './pages/internal/Referrals'
 import ReferralDetail from './pages/internal/ReferralDetail'
 import Clients from './pages/internal/Clients'
 import Credits from './pages/internal/Credits'
+import Settings from './pages/internal/Settings'
 
 // Client portal pages
 import ClientLayout from './components/ClientLayout'
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="referrals/:id" element={<ReferralDetail />} />
         <Route path="clients" element={<Clients />} />
         <Route path="credits" element={<Credits />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
 
       {/* Client portal routes */}

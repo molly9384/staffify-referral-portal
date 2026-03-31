@@ -12,7 +12,7 @@ from auth import (
 from config import settings
 from database import get_db
 from models import User, UserRole
-from schemas import LoginRequest, Token, UserCreate, UserOut
+from schemas import LoginRequest, Token, UserCreate, UserOut, ChangePasswordRequest
 
 router = APIRouter()
 
@@ -72,6 +72,21 @@ async def register(
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_active_user)):
     return current_user
+
+
+@router.put("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if not verify_password(request.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    current_user.hashed_password = get_password_hash(request.new_password)
+    await db.commit()
+    return {"message": "Password updated successfully"}
 
 
 @router.post("/setup-admin")

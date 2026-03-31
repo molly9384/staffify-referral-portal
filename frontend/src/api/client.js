@@ -43,6 +43,9 @@ export const login = (email, password) =>
 export const getMe = () =>
   apiClient.get('/auth/me').then((r) => r.data)
 
+export const changePassword = (data) =>
+  apiClient.put('/auth/change-password', data).then((r) => r.data)
+
 export const registerUser = (data) =>
   apiClient.post('/auth/register', data).then((r) => r.data)
 
