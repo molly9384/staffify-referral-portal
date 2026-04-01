@@ -9,12 +9,24 @@ export default function Settings() {
   // Hubstaff connection state
   const [hubstaffConnected, setHubstaffConnected] = useState(false)
   const [hubstaffChecking, setHubstaffChecking] = useState(true)
+  const [hubstaffError, setHubstaffError] = useState('')
 
   useEffect(() => {
     // Check for redirect params from OAuth callback first
     const hash = window.location.hash
+    console.log('[Settings] window.location.hash:', hash)
+
     if (hash.includes('hubstaff_connected=true')) {
       setHubstaffConnected(true)
+      setHubstaffChecking(false)
+      window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
+      return
+    }
+
+    if (hash.includes('hubstaff_error=')) {
+      const match = hash.match(/hubstaff_error=([^&]*)/)
+      const errMsg = match ? decodeURIComponent(match[1]) : 'Unknown error'
+      setHubstaffError(errMsg)
       setHubstaffChecking(false)
       window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
       return
@@ -142,6 +154,12 @@ export default function Settings() {
             <h2 className="text-base font-semibold text-gray-900">Integrations</h2>
           </div>
           <div className="card-body space-y-4">
+            {hubstaffError && (
+              <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200">
+                <p className="text-sm font-medium text-red-700">Hubstaff connection failed</p>
+                <p className="text-xs text-red-600 mt-1 font-mono break-all">{hubstaffError}</p>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-900">Hubstaff</p>
