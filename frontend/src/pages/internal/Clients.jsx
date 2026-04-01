@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getClients, createClient, updateClient, getHubstaffProjects } from '../../api/client'
+import { getClients, createClient, updateClient, getHubstaffProjects, lookupQBOCustomer } from '../../api/client'
 import { formatDate } from '../../utils/format'
 
 export default function Clients() {
@@ -10,6 +10,8 @@ export default function Clients() {
   const [editingClient, setEditingClient] = useState(null)
   const [projects, setProjects] = useState([])
   const [submitting, setSubmitting] = useState(false)
+  const [qboLooking, setQboLooking] = useState(false)
+  const [qboStatus, setQboStatus] = useState('') // 'found' | 'not_found' | ''
 
   const emptyForm = {
     name: '',
@@ -25,7 +27,7 @@ export default function Clients() {
     setLoading(true)
     try {
       const data = await getClients()
-      setClients(data)
+      setClients([...data].sort((a, b) => a.name.localeCompare(b.name)))
     } catch {
       setError('Failed to load clients.')
     } finally {
@@ -36,7 +38,7 @@ export default function Clients() {
   const loadProjects = async () => {
     try {
       const ps = await getHubstaffProjects()
-      setProjects(ps)
+      setProjects([...ps].sort((a, b) => a.name.localeCompare(b.name)))
     } catch {
       // Projects are optional - don't block the modal
     }
@@ -47,6 +49,7 @@ export default function Clients() {
   const openCreate = () => {
     setEditingClient(null)
     setForm(emptyForm)
+    setQboStatus('')
     setShowModal(true)
     loadProjects()
   }
@@ -61,6 +64,7 @@ export default function Clients() {
       hubstaff_project_name: client.hubstaff_project_name || '',
       is_active: client.is_active,
     })
+    setQboStatus(client.qbo_customer_id ? 'found' : '')
     setShowModal(true)
     loadProjects()
   }
@@ -89,14 +93,43 @@ export default function Clients() {
     }
   }
 
-  const handleProjectChange = (e) => {
+  const handleProjectChange = async (e) => {
     const pid = e.target.value
     const project = projects.find((p) => p.id === pid)
+    const projectName = project?.name || ''
+
     setForm((f) => ({
       ...f,
       hubstaff_project_id: pid,
-      hubstaff_project_name: project?.name || f.hubstaff_project_name,
+      hubstaff_project_name: projectName,
+      name: projectName,
+      // Reset QBO fields until lookup completes
+      qbo_customer_id: '',
+      email: '',
     }))
+    setQboStatus('')
+
+    if (!projectName) return
+
+    // Auto-lookup QBO customer by name
+    setQboLooking(true)
+    try {
+      const result = await lookupQBOCustomer(projectName)
+      if (result.found) {
+        setForm((f) => ({
+          ...f,
+          qbo_customer_id: result.customer.id,
+          email: result.customer.email || '',
+        }))
+        setQboStatus('found')
+      } else {
+        setQboStatus('not_found')
+      }
+    } catch {
+      setQboStatus('not_found')
+    } finally {
+      setQboLooking(false)
+    }
   }
 
   return (
@@ -187,21 +220,9 @@ export default function Clients() {
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="label">Company Name</label>
-                  <input type="text" className="input" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Email</label>
-                  <input type="email" className="input" required value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="label">QBO Customer ID</label>
-                  <input type="text" className="input" placeholder="Optional" value={form.qbo_customer_id} onChange={(e) => setForm((f) => ({ ...f, qbo_customer_id: e.target.value }))} />
-                </div>
-                <div>
                   <label className="label">Hubstaff Project</label>
-                  <select className="input" value={form.hubstaff_project_id} onChange={handleProjectChange}>
-                    <option value="">Select project…</option>
+                  <select className="input" required value={form.hubstaff_project_id} onChange={handleProjectChange}>
+                    <option value="">Select a project…</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
@@ -210,6 +231,39 @@ export default function Clients() {
                     )}
                   </select>
                 </div>
+
+                {/* QBO lookup status */}
+                {qboLooking && (
+                  <div className="col-span-2 flex items-center gap-2 text-xs text-gray-500">
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                    Looking up QuickBooks customer…
+                  </div>
+                )}
+                {!qboLooking && qboStatus === 'found' && (
+                  <div className="col-span-2 flex items-center gap-2 text-xs text-green-600">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    QuickBooks customer matched — ID and email auto-filled
+                  </div>
+                )}
+                {!qboLooking && qboStatus === 'not_found' && (
+                  <div className="col-span-2 flex items-center gap-2 text-xs text-amber-600">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                    No QBO customer found with this name — you can enter the ID manually below
+                  </div>
+                )}
+
+                <div>
+                  <label className="label">QBO Customer ID <span className="text-gray-400 font-normal">(auto-filled)</span></label>
+                  <input type="text" className="input" placeholder="Auto-filled from QBO" value={form.qbo_customer_id} onChange={(e) => setForm((f) => ({ ...f, qbo_customer_id: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Email <span className="text-gray-400 font-normal">(auto-filled)</span></label>
+                  <input type="email" className="input" placeholder="Auto-filled from QBO" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+                </div>
+
                 <div className="col-span-2 flex items-center gap-3">
                   <input
                     type="checkbox"
@@ -223,7 +277,7 @@ export default function Clients() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
-                <button type="submit" disabled={submitting} className="btn-primary flex-1 justify-center">{submitting ? 'Saving…' : 'Save Client'}</button>
+                <button type="submit" disabled={submitting || qboLooking} className="btn-primary flex-1 justify-center">{submitting ? 'Saving…' : 'Save Client'}</button>
               </div>
             </form>
           </div>

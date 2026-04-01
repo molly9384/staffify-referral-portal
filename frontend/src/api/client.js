@@ -148,4 +148,7 @@ export const registerHubstaffWebhook = () =>
 export const getQBOStatus = () =>
   apiClient.get('/qbo/status').then((r) => r.data)
 
+export const lookupQBOCustomer = (name) =>
+  apiClient.get('/qbo/customer-lookup', { params: { name } }).then((r) => r.data)
+
 export default apiClient

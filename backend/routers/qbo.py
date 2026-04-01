@@ -69,6 +69,20 @@ async def qbo_callback(request: Request, db: AsyncSession = Depends(get_db)):
         )
 
 
+@router.get("/customer-lookup")
+async def qbo_customer_lookup(name: str, current_user: User = Depends(require_admin)):
+    """Look up a QBO customer by DisplayName. Returns id, display_name, email."""
+    try:
+        from services.qbo_service import QBOService
+        service = QBOService()
+        customer = await service.find_customer_by_name(name)
+        if not customer:
+            return {"found": False, "customer": None}
+        return {"found": True, "customer": customer}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"QBO lookup failed: {str(e)}")
+
+
 @router.get("/status")
 async def qbo_status(current_user: User = Depends(require_admin)):
     try:

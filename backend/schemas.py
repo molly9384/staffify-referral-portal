@@ -56,7 +56,7 @@ class UserOut(UserBase):
 
 class ClientBase(BaseModel):
     name: str
-    email: EmailStr
+    email: Optional[str] = None
     qbo_customer_id: Optional[str] = None
     hubstaff_project_id: Optional[str] = None
     hubstaff_project_name: Optional[str] = None

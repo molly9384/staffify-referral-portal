@@ -111,6 +111,26 @@ class QBOService:
             response.raise_for_status()
             return response.json()
 
+    async def find_customer_by_name(self, display_name: str) -> Optional[dict]:
+        """Look up a QBO customer by DisplayName. Returns id, display_name, email or None."""
+        if not self.realm_id:
+            raise ValueError("QBO not connected: no realm_id")
+        # Escape single quotes in name
+        safe_name = display_name.replace("'", "\\'")
+        query = f"SELECT * FROM Customer WHERE DisplayName = '{safe_name}' MAXRESULTS 1"
+        url = f"{self.base_url}/{self.realm_id}/query"
+        data = await self._make_request("GET", url, params={"query": query, "minorversion": "65"})
+        customers = data.get("QueryResponse", {}).get("Customer", [])
+        if not customers:
+            return None
+        c = customers[0]
+        email = c.get("PrimaryEmailAddr", {}).get("Address", "") if c.get("PrimaryEmailAddr") else ""
+        return {
+            "id": str(c.get("Id", "")),
+            "display_name": c.get("DisplayName", ""),
+            "email": email,
+        }
+
     async def get_customer_invoices(self, customer_id: str, status: str = "Paid") -> list:
         """Get invoices for a customer filtered by status."""
         if not self.realm_id:
