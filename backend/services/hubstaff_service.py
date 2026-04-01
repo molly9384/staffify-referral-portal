@@ -31,7 +31,6 @@ class HubstaffService:
             "client_id": settings.HUBSTAFF_CLIENT_ID,
             "redirect_uri": f"{settings.BASE_URL}/hubstaff/callback",
             "scope": "hubstaff:read hubstaff:write",
-            "nonce": "staffify_referral_portal",
         }
         return f"{HUBSTAFF_AUTH_URL}?{urlencode(params)}"
 
