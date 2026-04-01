@@ -11,31 +11,51 @@ export default function Settings() {
   const [hubstaffChecking, setHubstaffChecking] = useState(true)
   const [hubstaffError, setHubstaffError] = useState('')
 
-  useEffect(() => {
-    // Check for redirect params from OAuth callback first
-    const hash = window.location.hash
-    console.log('[Settings] window.location.hash:', hash)
+  // QBO connection state
+  const [qboConnected, setQboConnected] = useState(false)
+  const [qboChecking, setQboChecking] = useState(true)
+  const [qboError, setQboError] = useState('')
 
+  useEffect(() => {
+    const hash = window.location.hash
+
+    // Handle Hubstaff OAuth callback
     if (hash.includes('hubstaff_connected=true')) {
       setHubstaffConnected(true)
       setHubstaffChecking(false)
       window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
+      apiClient.get('/api/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
       return
     }
-
     if (hash.includes('hubstaff_error=')) {
       const match = hash.match(/hubstaff_error=([^&]*)/)
-      const errMsg = match ? decodeURIComponent(match[1]) : 'Unknown error'
-      setHubstaffError(errMsg)
+      setHubstaffError(match ? decodeURIComponent(match[1]) : 'Unknown error')
       setHubstaffChecking(false)
       window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
+      apiClient.get('/api/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
       return
     }
 
-    // Otherwise check current connection status from backend
-    apiClient.get('/api/hubstaff/status').then(r => {
-      setHubstaffConnected(r.data.connected)
-    }).catch(() => {}).finally(() => setHubstaffChecking(false))
+    // Handle QBO OAuth callback
+    if (hash.includes('qbo_connected=true')) {
+      setQboConnected(true)
+      setQboChecking(false)
+      window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
+      apiClient.get('/api/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
+      return
+    }
+    if (hash.includes('qbo_error=')) {
+      const match = hash.match(/qbo_error=([^&]*)/)
+      setQboError(match ? decodeURIComponent(match[1]) : 'Unknown error')
+      setQboChecking(false)
+      window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
+      apiClient.get('/api/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
+      return
+    }
+
+    // Otherwise check both connection statuses
+    apiClient.get('/api/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
+    apiClient.get('/api/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
   }, [])
 
   // Profile state
@@ -160,6 +180,14 @@ export default function Settings() {
                 <p className="text-xs text-red-600 mt-1 font-mono break-all">{hubstaffError}</p>
               </div>
             )}
+            {qboError && (
+              <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200">
+                <p className="text-sm font-medium text-red-700">QuickBooks connection failed</p>
+                <p className="text-xs text-red-600 mt-1 font-mono break-all">{qboError}</p>
+              </div>
+            )}
+
+            {/* Hubstaff row */}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-900">Hubstaff</p>
@@ -173,11 +201,30 @@ export default function Settings() {
                   Connected
                 </span>
               ) : (
-                <a
-                  href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/hubstaff/connect`}
-                  className="btn-primary text-xs"
-                >
+                <a href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/hubstaff/connect`} className="btn-primary text-xs">
                   Connect Hubstaff
+                </a>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100" />
+
+            {/* QuickBooks row */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">QuickBooks Online</p>
+                <p className="text-xs text-gray-500 mt-0.5">Connect to apply referral credits to invoices</p>
+              </div>
+              {qboChecking ? (
+                <span className="text-xs text-gray-400">Checking…</span>
+              ) : qboConnected ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  Connected
+                </span>
+              ) : (
+                <a href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/api/qbo/auth`} className="btn-primary text-xs">
+                  Connect QuickBooks
                 </a>
               )}
             </div>

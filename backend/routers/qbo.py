@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import require_admin
 from config import settings
+from database import get_db
 from models import User
 from schemas import MessageResponse
 
@@ -10,7 +12,8 @@ router = APIRouter()
 
 
 @router.get("/auth")
-async def qbo_auth(current_user: User = Depends(require_admin)):
+async def qbo_auth():
+    """Redirect admin to QBO OAuth authorization page."""
     try:
         from services.qbo_service import QBOService
         service = QBOService()
@@ -21,29 +24,48 @@ async def qbo_auth(current_user: User = Depends(require_admin)):
 
 
 @router.get("/callback")
-async def qbo_callback(request: Request):
+async def qbo_callback(request: Request, db: AsyncSession = Depends(get_db)):
+    """Handle OAuth callback from QBO. Exchanges code for tokens and persists to DB."""
     code = request.query_params.get("code")
     realm_id = request.query_params.get("realmId")
     error = request.query_params.get("error")
 
     if error:
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/internal/dashboard?qbo_error={error}"
+            url=f"{settings.FRONTEND_URL}/#/internal/settings?qbo_error={error}"
         )
 
     if not code or not realm_id:
-        raise HTTPException(status_code=400, detail="Missing code or realmId from QBO callback")
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/#/internal/settings?qbo_error=Missing+code+or+realmId"
+        )
 
     try:
         from services.qbo_service import QBOService
+        from models import SystemConfig
         service = QBOService()
-        await service.exchange_code_for_tokens(code, realm_id)
+        tokens = await service.exchange_code_for_tokens(code, realm_id)
+
+        # Persist tokens to DB so they survive restarts and multi-worker deployments
+        for key, value in [
+            ("QBO_ACCESS_TOKEN", tokens.get("access_token", "")),
+            ("QBO_REFRESH_TOKEN", tokens.get("refresh_token", "")),
+            ("QBO_REALM_ID", realm_id),
+        ]:
+            if value:
+                existing = await db.get(SystemConfig, key)
+                if existing:
+                    existing.value = value
+                else:
+                    db.add(SystemConfig(key=key, value=value))
+        await db.commit()
+
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/internal/dashboard?qbo_connected=true"
+            url=f"{settings.FRONTEND_URL}/#/internal/settings?qbo_connected=true"
         )
     except Exception as e:
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/internal/dashboard?qbo_error={str(e)}"
+            url=f"{settings.FRONTEND_URL}/#/internal/settings?qbo_error={str(e)}"
         )
 
 
