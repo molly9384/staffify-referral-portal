@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     HUBSTAFF_API_TOKEN: str = ""
     HUBSTAFF_ORG_ID: str = "699143"
     HUBSTAFF_WEBHOOK_SECRET: str = ""
+    HUBSTAFF_CLIENT_ID: str = ""
+    HUBSTAFF_CLIENT_SECRET: str = ""
+    HUBSTAFF_ACCESS_TOKEN: str = ""
+    HUBSTAFF_REFRESH_TOKEN: str = ""
 
     QBO_CLIENT_ID: str = ""
     QBO_CLIENT_SECRET: str = ""

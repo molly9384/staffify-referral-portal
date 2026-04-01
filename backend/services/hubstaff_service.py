@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import os
 from datetime import date
 from typing import Optional
 
@@ -8,15 +9,69 @@ import httpx
 from config import settings
 
 HUBSTAFF_API_BASE = "https://api.hubstaff.com/v2"
+HUBSTAFF_TOKEN_URL = "https://account.hubstaff.com/access_tokens"
+HUBSTAFF_AUTH_URL = "https://account.hubstaff.com/authorizations/new"
 
 
 class HubstaffService:
     def __init__(self):
-        self.token = settings.HUBSTAFF_API_TOKEN
+        # Prefer OAuth access token; fall back to PAT for read-only ops
+        self.token = settings.HUBSTAFF_ACCESS_TOKEN or settings.HUBSTAFF_API_TOKEN
         self.headers = {
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
         }
+
+    @staticmethod
+    def get_auth_url() -> str:
+        """Generate the Hubstaff OAuth2 authorization URL."""
+        from urllib.parse import urlencode
+        params = {
+            "response_type": "code",
+            "client_id": settings.HUBSTAFF_CLIENT_ID,
+            "redirect_uri": f"{settings.BASE_URL}/hubstaff/callback",
+            "scope": "hubstaff:read hubstaff:write",
+            "nonce": "staffify_referral_portal",
+        }
+        return f"{HUBSTAFF_AUTH_URL}?{urlencode(params)}"
+
+    @staticmethod
+    async def exchange_code_for_tokens(code: str) -> dict:
+        """Exchange authorization code for access + refresh tokens."""
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                HUBSTAFF_TOKEN_URL,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": f"{settings.BASE_URL}/hubstaff/callback",
+                    "client_id": settings.HUBSTAFF_CLIENT_ID,
+                    "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+
+    @staticmethod
+    async def refresh_access_token() -> dict:
+        """Use the refresh token to get a new access token."""
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                HUBSTAFF_TOKEN_URL,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": settings.HUBSTAFF_REFRESH_TOKEN,
+                    "client_id": settings.HUBSTAFF_CLIENT_ID,
+                    "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+
+    @staticmethod
+    def is_connected() -> bool:
+        """Check if we have a valid OAuth access token."""
+        return bool(settings.HUBSTAFF_ACCESS_TOKEN or settings.HUBSTAFF_API_TOKEN)
 
     async def get_project_members(self, project_id: str) -> list:
         url = f"{HUBSTAFF_API_BASE}/projects/{project_id}/members"

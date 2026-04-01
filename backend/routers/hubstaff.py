@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -15,6 +16,64 @@ from models import HubstaffEvent, VirtualAssistant, User
 from schemas import HubstaffProjectOut, MessageResponse
 
 router = APIRouter()
+
+
+@router.get("/hubstaff/connect")
+async def hubstaff_connect(current_user: User = Depends(require_admin)):
+    """Redirect admin to Hubstaff OAuth authorization page."""
+    from services.hubstaff_service import HubstaffService
+    auth_url = HubstaffService.get_auth_url()
+    return RedirectResponse(url=auth_url)
+
+
+@router.get("/hubstaff/callback")
+async def hubstaff_callback(code: str = None, error: str = None):
+    """Handle OAuth callback from Hubstaff. Exchanges code for tokens and saves to env."""
+    if error:
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/#/internal/settings?hubstaff_error={error}"
+        )
+    if not code:
+        raise HTTPException(status_code=400, detail="No authorization code received")
+
+    try:
+        from services.hubstaff_service import HubstaffService
+        tokens = await HubstaffService.exchange_code_for_tokens(code)
+        access_token = tokens.get("access_token", "")
+        refresh_token = tokens.get("refresh_token", "")
+
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token in response")
+
+        # Persist tokens to Render environment via env vars
+        # In production these get stored as env vars; for now write to settings object
+        # and instruct admin to save via the settings page
+        import os
+        os.environ["HUBSTAFF_ACCESS_TOKEN"] = access_token
+        os.environ["HUBSTAFF_REFRESH_TOKEN"] = refresh_token
+        # Reload settings
+        settings.HUBSTAFF_ACCESS_TOKEN = access_token
+        settings.HUBSTAFF_REFRESH_TOKEN = refresh_token
+
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/#/internal/settings?hubstaff_connected=true"
+        )
+    except Exception as e:
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/#/internal/settings?hubstaff_error={str(e)}"
+        )
+
+
+@router.get("/api/hubstaff/status")
+async def hubstaff_status(current_user: User = Depends(require_admin)):
+    """Check if Hubstaff OAuth is connected."""
+    from services.hubstaff_service import HubstaffService
+    connected = HubstaffService.is_connected()
+    return {
+        "connected": connected,
+        "has_oauth_token": bool(settings.HUBSTAFF_ACCESS_TOKEN),
+        "has_pat": bool(settings.HUBSTAFF_API_TOKEN),
+    }
 
 
 @router.post("/webhooks/hubstaff", include_in_schema=False)

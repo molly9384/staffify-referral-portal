@@ -1,9 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { changePassword, updateProfile } from '../../api/client'
+import apiClient from '../../api/client'
 
 export default function Settings() {
   const { user, refreshUser } = useAuth()
+
+  // Hubstaff connection state
+  const [hubstaffConnected, setHubstaffConnected] = useState(false)
+  const [hubstaffChecking, setHubstaffChecking] = useState(true)
+
+  useEffect(() => {
+    // Check Hubstaff connection status
+    apiClient.get('/api/hubstaff/status').then(r => {
+      setHubstaffConnected(r.data.connected)
+    }).catch(() => {}).finally(() => setHubstaffChecking(false))
+
+    // Check for redirect params from OAuth callback
+    const hash = window.location.hash
+    if (hash.includes('hubstaff_connected=true')) {
+      setHubstaffConnected(true)
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   // Profile state
   const [fullName, setFullName] = useState(user?.full_name || '')
@@ -113,6 +132,38 @@ export default function Settings() {
           </form>
         </div>
       </div>
+
+      {/* Integrations Card */}
+      {user?.role === 'admin' && (
+        <div className="card mb-6">
+          <div className="card-header">
+            <h2 className="text-base font-semibold text-gray-900">Integrations</h2>
+          </div>
+          <div className="card-body space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Hubstaff</p>
+                <p className="text-xs text-gray-500 mt-0.5">Connect to pull invoices and VA data</p>
+              </div>
+              {hubstaffChecking ? (
+                <span className="text-xs text-gray-400">Checking…</span>
+              ) : hubstaffConnected ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  Connected
+                </span>
+              ) : (
+                <a
+                  href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/hubstaff/connect`}
+                  className="btn-primary text-xs"
+                >
+                  Connect Hubstaff
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Change Password Card */}
       <div className="card">
