@@ -31,7 +31,7 @@ class HubstaffService:
             "response_type": "code",
             "client_id": settings.HUBSTAFF_CLIENT_ID,
             "redirect_uri": f"{settings.BASE_URL}/hubstaff/callback",
-            "scope": "hubstaff:read hubstaff:write",
+            "scope": "openid hubstaff:read hubstaff:write",
             "nonce": secrets.token_urlsafe(16),
         }
         return f"{HUBSTAFF_AUTH_URL}?{urlencode(params)}"
@@ -48,7 +48,8 @@ class HubstaffService:
             "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
         }
         print(f"[Hubstaff] Token exchange to: {HUBSTAFF_TOKEN_URL}")
-        print(f"[Hubstaff] client_id length: {len(settings.HUBSTAFF_CLIENT_ID)}, secret length: {len(settings.HUBSTAFF_CLIENT_SECRET)}")
+        print(f"[Hubstaff] client_id: {settings.HUBSTAFF_CLIENT_ID[:8]}… (len={len(settings.HUBSTAFF_CLIENT_ID)})")
+        print(f"[Hubstaff] secret: {settings.HUBSTAFF_CLIENT_SECRET[:4]}… (len={len(settings.HUBSTAFF_CLIENT_SECRET)})")
         print(f"[Hubstaff] redirect_uri: {settings.BASE_URL}/hubstaff/callback")
         print(f"[Hubstaff] code (first 10): {code[:10]}")
         async with httpx.AsyncClient(timeout=30) as client:
