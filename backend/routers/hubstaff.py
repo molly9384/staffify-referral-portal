@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 @router.get("/hubstaff/connect")
-async def hubstaff_connect(current_user: User = Depends(require_admin)):
+async def hubstaff_connect():
     """Redirect admin to Hubstaff OAuth authorization page."""
     from services.hubstaff_service import HubstaffService
     auth_url = HubstaffService.get_auth_url()
