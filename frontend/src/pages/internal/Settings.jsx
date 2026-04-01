@@ -24,7 +24,7 @@ export default function Settings() {
       setHubstaffConnected(true)
       setHubstaffChecking(false)
       window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
-      apiClient.get('/api/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
+      apiClient.get('/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
       return
     }
     if (hash.includes('hubstaff_error=')) {
@@ -32,7 +32,7 @@ export default function Settings() {
       setHubstaffError(match ? decodeURIComponent(match[1]) : 'Unknown error')
       setHubstaffChecking(false)
       window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
-      apiClient.get('/api/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
+      apiClient.get('/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
       return
     }
 
@@ -41,7 +41,7 @@ export default function Settings() {
       setQboConnected(true)
       setQboChecking(false)
       window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
-      apiClient.get('/api/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
+      apiClient.get('/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
       return
     }
     if (hash.includes('qbo_error=')) {
@@ -49,13 +49,13 @@ export default function Settings() {
       setQboError(match ? decodeURIComponent(match[1]) : 'Unknown error')
       setQboChecking(false)
       window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
-      apiClient.get('/api/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
+      apiClient.get('/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
       return
     }
 
     // Otherwise check both connection statuses
-    apiClient.get('/api/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
-    apiClient.get('/api/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
+    apiClient.get('/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
+    apiClient.get('/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
   }, [])
 
   // Profile state
