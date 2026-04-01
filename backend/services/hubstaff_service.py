@@ -47,11 +47,6 @@ class HubstaffService:
             "client_id": settings.HUBSTAFF_CLIENT_ID,
             "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
         }
-        print(f"[Hubstaff] Token exchange to: {HUBSTAFF_TOKEN_URL}")
-        print(f"[Hubstaff] client_id: {settings.HUBSTAFF_CLIENT_ID[:8]}… (len={len(settings.HUBSTAFF_CLIENT_ID)})")
-        print(f"[Hubstaff] secret: {settings.HUBSTAFF_CLIENT_SECRET[:4]}… (len={len(settings.HUBSTAFF_CLIENT_SECRET)})")
-        print(f"[Hubstaff] redirect_uri: {settings.BASE_URL}/hubstaff/callback")
-        print(f"[Hubstaff] code (first 10): {code[:10]}")
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 HUBSTAFF_TOKEN_URL,
@@ -61,8 +56,6 @@ class HubstaffService:
                     "Accept": "application/json",
                 },
             )
-            print(f"[Hubstaff] Response status: {response.status_code}")
-            print(f"[Hubstaff] Response body: {response.text}")
             if not response.is_success:
                 raise Exception(f"Token exchange failed ({response.status_code}): {response.text}")
             data = response.json()
