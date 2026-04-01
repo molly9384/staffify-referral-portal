@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCredits, getCreditSummary, runCreditAutomation, applyCredits } from '../../api/client'
+import { getCredits, getCreditSummary, runCreditAutomation, applyCredits, updateCredit, recalculateCredit } from '../../api/client'
 import CreditSummaryComponent from '../../components/CreditSummary'
 import { formatDate, formatCurrency } from '../../utils/format'
 
@@ -9,6 +9,76 @@ const STATUS_TABS = [
   { key: 'applied', label: 'Applied' },
   { key: 'voided', label: 'Voided' },
 ]
+
+function EditCreditModal({ credit, onClose, onSaved }) {
+  const [amount, setAmount] = useState(Number(credit.credit_amount).toFixed(2))
+  const [notes, setNotes] = useState(credit.notes || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      await updateCredit(credit.id, { credit_amount: parseFloat(amount), notes })
+      onSaved()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Edit Credit</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div className="text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
+            <p className="font-medium text-gray-700">{credit.referral?.referred_name}</p>
+            {credit.hubstaff_invoice_number && (
+              <p className="text-xs mt-0.5">Invoice #{credit.hubstaff_invoice_number}</p>
+            )}
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div>
+            <label className="label">Credit Amount ($)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="input"
+            />
+            <p className="text-xs text-gray-400 mt-1">Original: {formatCurrency(credit.credit_amount)} ({Number(credit.hours_worked).toFixed(2)} hrs × $1.00/hr)</p>
+          </div>
+          <div>
+            <label className="label">Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="input"
+              rows={3}
+              placeholder="Reason for adjustment…"
+            />
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary">
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Credits() {
   const [credits, setCredits] = useState([])
@@ -20,6 +90,8 @@ export default function Credits() {
   const [successMsg, setSuccessMsg] = useState('')
   const [automationRunning, setAutomationRunning] = useState(false)
   const [applyRunning, setApplyRunning] = useState(false)
+  const [editingCredit, setEditingCredit] = useState(null)
+  const [recalculating, setRecalculating] = useState(null) // credit id
 
   const load = async () => {
     setLoading(true)
@@ -79,8 +151,35 @@ export default function Credits() {
     }
   }
 
+  const handleRecalculate = async (creditId) => {
+    setRecalculating(creditId)
+    setError('')
+    setSuccessMsg('')
+    try {
+      await recalculateCredit(creditId)
+      setSuccessMsg('Credit recalculated from Hubstaff invoice.')
+      await Promise.all([load(), loadSummary()])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Recalculation failed.')
+    } finally {
+      setRecalculating(null)
+    }
+  }
+
   return (
     <div className="p-8 space-y-6">
+      {editingCredit && (
+        <EditCreditModal
+          credit={editingCredit}
+          onClose={() => setEditingCredit(null)}
+          onSaved={async () => {
+            setEditingCredit(null)
+            setSuccessMsg('Credit updated.')
+            await Promise.all([load(), loadSummary()])
+          }}
+        />
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Credits</h1>
@@ -98,7 +197,7 @@ export default function Credits() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             )}
-            {automationRunning ? 'Running…' : 'Run Automation'}
+            {automationRunning ? 'Running…' : 'Pull Invoices'}
           </button>
           <button onClick={handleApplyCredits} disabled={applyRunning} className="btn-primary">
             {applyRunning ? (
@@ -157,20 +256,20 @@ export default function Credits() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="text-sm text-gray-500">No credits found.</p>
-            <p className="text-xs text-gray-400 mt-1">Run the automation to calculate credits for active referrals.</p>
+            <p className="text-xs text-gray-400 mt-1">Click "Pull Invoices" to pull credits from Hubstaff invoices.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Referral</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Period</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Referred Client</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Invoice #</th>
                   <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Hours</th>
                   <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Credit</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Invoice</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Applied</th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -180,24 +279,52 @@ export default function Credits() {
                     applied: 'bg-green-100 text-green-700',
                     voided: 'bg-red-100 text-red-700',
                   }[credit.status]
+                  const isRecalculating = recalculating === credit.id
                   return (
                     <tr key={credit.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-3.5 font-medium text-gray-900">
-                        {credit.referral?.referred_name ?? '—'}
-                        <p className="text-xs text-gray-400 font-normal">
-                          Ref: {credit.referral?.referring_client?.name ?? '—'}
-                        </p>
+                      <td className="px-6 py-3.5">
+                        <p className="font-medium text-gray-900">{credit.referral?.referred_name ?? '—'}</p>
+                        <p className="text-xs text-gray-400">→ {credit.referral?.referring_client?.name ?? '—'}</p>
                       </td>
-                      <td className="px-6 py-3.5 text-gray-600 text-xs">
-                        {formatDate(credit.period_start)} –<br />{formatDate(credit.period_end)}
+                      <td className="px-6 py-3.5 text-gray-500 font-mono text-xs">
+                        {credit.hubstaff_invoice_number ? `#${credit.hubstaff_invoice_number}` : '—'}
                       </td>
                       <td className="px-6 py-3.5 text-right tabular-nums">{Number(credit.hours_worked).toFixed(2)}</td>
                       <td className="px-6 py-3.5 text-right font-medium tabular-nums">{formatCurrency(credit.credit_amount)}</td>
                       <td className="px-6 py-3.5">
                         <span className={`badge ${statusClass}`}>{credit.status}</span>
                       </td>
-                      <td className="px-6 py-3.5 text-gray-500 font-mono text-xs">{credit.qbo_invoice_id ?? '—'}</td>
-                      <td className="px-6 py-3.5 text-gray-400 text-xs">{formatDate(credit.applied_date)}</td>
+                      <td className="px-6 py-3.5 text-gray-400 text-xs">
+                        {credit.applied_date ? formatDate(credit.applied_date) : '—'}
+                        {credit.qbo_invoice_id && (
+                          <p className="font-mono text-gray-300">{credit.qbo_invoice_id}</p>
+                        )}
+                      </td>
+                      <td className="px-6 py-3.5">
+                        <div className="flex items-center justify-end gap-2">
+                          {credit.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => setEditingCredit(credit)}
+                                className="text-xs text-primary-600 hover:text-primary-800 font-medium"
+                                title="Edit credit amount"
+                              >
+                                Edit
+                              </button>
+                              {credit.hubstaff_invoice_id && (
+                                <button
+                                  onClick={() => handleRecalculate(credit.id)}
+                                  disabled={isRecalculating}
+                                  className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+                                  title="Recalculate from Hubstaff invoice"
+                                >
+                                  {isRecalculating ? 'Recalc…' : 'Recalc'}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   )
                 })}
