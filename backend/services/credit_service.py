@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 
@@ -12,7 +12,19 @@ from models import (
     Client, ReferralStatus, CreditStatus
 )
 
-CREDIT_RATE = Decimal("1.00")  # $1.00 per hour worked
+CREDIT_RATE = Decimal("1.00")  # $1.00 per hour worked by the eligible VA
+
+
+def _parse_hours(quantity) -> Decimal:
+    """
+    Convert a Hubstaff line item quantity to decimal hours.
+    Hubstaff may return hours as a decimal float (e.g. 8.006388...)
+    or as a string. Always returns a Decimal.
+    """
+    try:
+        return Decimal(str(quantity)).quantize(Decimal("0.0001"))
+    except Exception:
+        return Decimal("0")
 
 
 class CreditService:
@@ -29,24 +41,6 @@ class CreditService:
             )
         )
         return result.scalar_one_or_none()
-
-    async def get_effective_months_elapsed(self, referral_id) -> float:
-        """
-        Calculate real months elapsed accounting for pauses.
-        Sums all closed + open clock period durations.
-        """
-        result = await self.db.execute(
-            select(VAClockPeriod).where(VAClockPeriod.referral_id == referral_id)
-        )
-        periods = result.scalars().all()
-        total_days = 0
-        today = date.today()
-        for period in periods:
-            end = period.period_end if period.period_end else today
-            delta = (end - period.period_start).days
-            if delta > 0:
-                total_days += delta
-        return total_days / 30.44  # average days per month
 
     async def get_effective_days_elapsed(self, referral_id) -> int:
         """Total active (non-paused) days elapsed for a referral."""
@@ -66,11 +60,11 @@ class CreditService:
     async def is_referral_eligible(self, referral_id) -> bool:
         """
         Check if a referral is currently eligible for credit accrual:
-        - Referral must be active
-        - Status must be 'active' or 'va_billing'
+        - Must be active with status active or va_billing
         - Within 12-month window (accounting for pauses)
         - Both referring and referred clients must be active
-        - Must have an eligible VA
+        - Must have an eligible VA with a Hubstaff username
+        - Referred client must have a Hubstaff project linked
         """
         result = await self.db.execute(
             select(Referral)
@@ -81,9 +75,7 @@ class CreditService:
             )
         )
         referral = result.scalar_one_or_none()
-        if not referral:
-            return False
-        if not referral.is_active:
+        if not referral or not referral.is_active:
             return False
         if referral.status not in (ReferralStatus.active, ReferralStatus.va_billing):
             return False
@@ -95,76 +87,56 @@ class CreditService:
         if effective_days >= 365:
             return False
 
-        # Both clients must be active
         if not referral.referring_client or not referral.referring_client.is_active:
             return False
         if not referral.referred_client or not referral.referred_client.is_active:
             return False
-
-        # Must have an eligible VA
-        eligible_va = await self.get_eligible_va(referral_id)
-        return eligible_va is not None
-
-    async def calculate_credits_for_period(
-        self,
-        referral_id,
-        period_start: date,
-        period_end: date,
-    ) -> Optional[Decimal]:
-        """
-        Calculate hours for the eligible VA in the given period from Hubstaff.
-        Returns credit amount (hours * CREDIT_RATE) or None if not eligible.
-        """
-        is_eligible = await self.is_referral_eligible(referral_id)
-        if not is_eligible:
-            return None
+        if not referral.referred_client.hubstaff_project_id:
+            return False
 
         eligible_va = await self.get_eligible_va(referral_id)
-        if not eligible_va or not eligible_va.hubstaff_user_id:
-            return None
+        return eligible_va is not None and bool(eligible_va.hubstaff_user_name)
 
-        # Get the referred client for their Hubstaff project
-        referral_result = await self.db.execute(
-            select(Referral)
-            .where(Referral.id == referral_id)
-            .options(selectinload(Referral.referred_client))
-        )
-        referral = referral_result.scalar_one_or_none()
-        if not referral or not referral.referred_client:
-            return None
+    def calculate_credits_from_invoice(
+        self, invoice: dict, va_name: str
+    ) -> tuple[Decimal, Decimal]:
+        """
+        Parse Hubstaff invoice line items and sum hours for the eligible VA.
 
-        project_id = referral.referred_client.hubstaff_project_id
-        if not project_id:
-            return None
+        Line item description format:
+            "Liezl Lidasan - Vic Devore (Fri, Mar 13, 2026)"
 
-        from services.hubstaff_service import HubstaffService
-        hubstaff = HubstaffService()
-        total_seconds = await hubstaff.get_tracked_seconds_for_user(
-            organization_id=settings.HUBSTAFF_ORG_ID,
-            project_id=project_id,
-            user_id=eligible_va.hubstaff_user_id,
-            start_date=period_start,
-            end_date=period_end,
-        )
+        We match any line item whose description starts with "{va_name} - ".
+        Returns (hours_worked, credit_amount).
+        """
+        line_items = invoice.get("line_items", [])
+        total_hours = Decimal("0")
 
-        hours_worked = Decimal(str(total_seconds / 3600)).quantize(Decimal("0.01"))
+        prefix = va_name + " - "
+        for item in line_items:
+            description = item.get("description", "")
+            if description.startswith(prefix):
+                quantity = _parse_hours(item.get("quantity", 0))
+                total_hours += quantity
+
+        hours_worked = total_hours.quantize(Decimal("0.01"))
         credit_amount = (hours_worked * CREDIT_RATE).quantize(Decimal("0.01"))
-        return credit_amount if hours_worked > 0 else None
+        return hours_worked, credit_amount
 
     async def process_bi_weekly_credits(self) -> dict:
         """
-        Main automation: for all active referrals, calculate credits for
-        the most recent bi-weekly period and queue them for application.
+        Main automation: pull Hubstaff invoices for every active referred client
+        and create one pending CreditLedger entry per invoice (if not already processed).
+        Run bi-weekly on Fridays.
         """
-        today = date.today()
-        # Bi-weekly period: last 14 days
-        period_end = today - timedelta(days=1)
-        period_start = today - timedelta(days=14)
+        from services.hubstaff_service import HubstaffService
+        hubstaff = HubstaffService()
 
         result = await self.db.execute(
             select(Referral).where(
                 Referral.is_active == True,
                 Referral.status.in_([ReferralStatus.active, ReferralStatus.va_billing]),
+                Referral.referred_client_id != None,
             ).options(
                 selectinload(Referral.referring_client),
                 selectinload(Referral.referred_client),
@@ -176,28 +148,53 @@ class CreditService:
         processed = 0
         credits_created = 0
         total_amount = Decimal("0.00")
+        errors = []
 
         for referral in active_referrals:
             try:
-                # Check if we already have a credit for this period
-                existing_result = await self.db.execute(
-                    select(CreditLedger).where(
-                        CreditLedger.referral_id == referral.id,
-                        CreditLedger.period_start == period_start,
-                        CreditLedger.period_end == period_end,
-                    )
-                )
-                if existing_result.scalar_one_or_none():
+                if not await self.is_referral_eligible(referral.id):
                     continue
 
-                credit_amount = await self.calculate_credits_for_period(
-                    referral.id, period_start, period_end
-                )
-                processed += 1
+                referred_client = referral.referred_client
+                eligible_va = await self.get_eligible_va(referral.id)
+                if not eligible_va:
+                    continue
 
-                if credit_amount and credit_amount > 0:
-                    eligible_va = await self.get_eligible_va(referral.id)
-                    hours_worked = credit_amount / CREDIT_RATE
+                # Fetch invoices from Hubstaff for this client's project
+                invoices = await hubstaff.get_invoices(
+                    organization_id=settings.HUBSTAFF_ORG_ID,
+                    project_id=referred_client.hubstaff_project_id,
+                )
+
+                for invoice in invoices:
+                    invoice_id = str(invoice.get("id", ""))
+                    if not invoice_id:
+                        continue
+
+                    # Skip if we already have a credit entry for this invoice
+                    existing = await self.db.execute(
+                        select(CreditLedger).where(
+                            CreditLedger.hubstaff_invoice_id == invoice_id
+                        )
+                    )
+                    if existing.scalar_one_or_none():
+                        continue
+
+                    hours_worked, credit_amount = self.calculate_credits_from_invoice(
+                        invoice, eligible_va.hubstaff_user_name
+                    )
+
+                    if credit_amount <= 0:
+                        continue
+
+                    # Use invoice_date as period_start; due_date or invoice_date as period_end
+                    raw_start = invoice.get("invoice_date") or invoice.get("start_date") or str(date.today())
+                    raw_end = invoice.get("due_date") or invoice.get("end_date") or raw_start
+                    try:
+                        period_start = date.fromisoformat(str(raw_start)[:10])
+                        period_end = date.fromisoformat(str(raw_end)[:10])
+                    except ValueError:
+                        period_start = period_end = date.today()
 
                     credit_entry = CreditLedger(
                         referral_id=referral.id,
@@ -207,20 +204,23 @@ class CreditService:
                         hours_worked=hours_worked,
                         credit_amount=credit_amount,
                         status=CreditStatus.pending,
+                        hubstaff_invoice_id=invoice_id,
+                        hubstaff_invoice_number=invoice.get("number", ""),
                     )
                     self.db.add(credit_entry)
 
-                    # Update referral totals
                     referral.total_credits_earned = (
                         Decimal(str(referral.total_credits_earned)) + credit_amount
                     )
-
                     credits_created += 1
                     total_amount += credit_amount
 
+                processed += 1
+
             except Exception as e:
-                # Log and continue; don't let one failure stop others
-                print(f"Error processing referral {referral.id}: {e}")
+                msg = f"Referral {referral.id}: {e}"
+                errors.append(msg)
+                print(f"Error processing {msg}")
                 continue
 
         await self.db.flush()
@@ -228,15 +228,66 @@ class CreditService:
             "processed": processed,
             "credits_created": credits_created,
             "total_amount": float(total_amount),
+            "errors": errors,
         }
+
+    async def recalculate_credit(self, credit_id) -> Optional[CreditLedger]:
+        """
+        Delete an existing credit entry and re-fetch the invoice from Hubstaff
+        to recalculate. Used when an invoice has been manually adjusted.
+        Returns the new CreditLedger entry, or None if no credits found.
+        """
+        from services.hubstaff_service import HubstaffService
+        hubstaff = HubstaffService()
+
+        result = await self.db.execute(
+            select(CreditLedger)
+            .where(CreditLedger.id == credit_id)
+            .options(
+                selectinload(CreditLedger.referral).selectinload(Referral.referred_client),
+                selectinload(CreditLedger.va),
+            )
+        )
+        credit = result.scalar_one_or_none()
+        if not credit or not credit.hubstaff_invoice_id:
+            return None
+
+        # Re-fetch the invoice
+        invoice = await hubstaff.get_invoice(credit.hubstaff_invoice_id)
+        va_name = credit.va.hubstaff_user_name
+        hours_worked, credit_amount = self.calculate_credits_from_invoice(invoice, va_name)
+
+        # Update the existing entry in place (preserves history)
+        old_amount = Decimal(str(credit.credit_amount))
+        credit.hours_worked = hours_worked
+        credit.credit_amount = credit_amount
+        credit.notes = (
+            (credit.notes or "") + f" [Recalculated on {date.today()}]"
+        ).strip()
+
+        # Adjust referral totals
+        referral_result = await self.db.execute(
+            select(Referral).where(Referral.id == credit.referral_id)
+        )
+        referral = referral_result.scalar_one_or_none()
+        if referral:
+            referral.total_credits_earned = (
+                Decimal(str(referral.total_credits_earned)) - old_amount + credit_amount
+            )
+
+        await self.db.flush()
+        return credit
 
     async def apply_pending_credits_to_invoices(self) -> dict:
         """
-        Apply all pending credits to QBO invoices.
-        Credits go to the referring client's next open invoice.
-        Credit cannot exceed the invoice total.
+        Apply pending credits to QBO invoices for the referring client.
+        Only applies credits whose corresponding Hubstaff invoice is marked paid.
+        Credits go to the referring client's oldest open QBO invoice.
         """
+        from services.hubstaff_service import HubstaffService
         from services.qbo_service import QBOService
+
+        hubstaff = HubstaffService()
         qbo = QBOService()
 
         if not qbo.is_connected():
@@ -246,49 +297,71 @@ class CreditService:
             select(CreditLedger)
             .where(CreditLedger.status == CreditStatus.pending)
             .options(
-                selectinload(CreditLedger.referral).selectinload(Referral.referring_client)
+                selectinload(CreditLedger.referral).selectinload(Referral.referring_client),
+                selectinload(CreditLedger.va),
             )
             .order_by(CreditLedger.period_start.asc())
         )
         pending_credits = result.scalars().all()
 
         applied = 0
+        skipped = 0
         total_applied = Decimal("0.00")
 
         for credit in pending_credits:
             try:
+                # Verify Hubstaff invoice is paid before applying
+                if credit.hubstaff_invoice_id:
+                    try:
+                        invoice = await hubstaff.get_invoice(credit.hubstaff_invoice_id)
+                        invoice_status = invoice.get("status", "")
+                        if invoice_status.lower() != "paid":
+                            credit.notes = (
+                                (credit.notes or "") +
+                                f" [Skipped: Hubstaff invoice status is '{invoice_status}', not paid]"
+                            ).strip()
+                            skipped += 1
+                            continue
+                    except Exception as e:
+                        credit.notes = (
+                            (credit.notes or "") +
+                            f" [Warning: could not verify Hubstaff invoice status: {e}]"
+                        ).strip()
+                        # Continue anyway if we can't check — admin can override
+
                 referring_client = credit.referral.referring_client
                 if not referring_client or not referring_client.qbo_customer_id:
                     credit.notes = (
                         (credit.notes or "") + " [Skipped: no QBO customer ID on referring client]"
                     ).strip()
+                    skipped += 1
                     continue
 
-                # Get open invoices for referring client
                 open_invoices = await qbo.get_unpaid_invoices(referring_client.qbo_customer_id)
                 if not open_invoices:
                     credit.notes = (
-                        (credit.notes or "") + " [Skipped: no open invoice found for referring client]"
+                        (credit.notes or "") + " [Skipped: no open QBO invoice for referring client]"
                     ).strip()
+                    skipped += 1
                     continue
 
-                # Use the first (oldest) open invoice
-                invoice = open_invoices[0]
-                invoice_id = invoice.get("Id")
-                invoice_balance = Decimal(str(invoice.get("Balance", 0)))
+                invoice_qbo = open_invoices[0]
+                invoice_id = invoice_qbo.get("Id")
+                invoice_balance = Decimal(str(invoice_qbo.get("Balance", 0)))
 
                 if invoice_balance <= 0:
                     credit.notes = (
-                        (credit.notes or "") + " [Skipped: invoice balance is zero]"
+                        (credit.notes or "") + " [Skipped: QBO invoice balance is zero]"
                     ).strip()
+                    skipped += 1
                     continue
 
-                # Credit cannot exceed invoice total
                 apply_amount = min(credit.credit_amount, invoice_balance)
 
                 description = (
                     f"Staffify Referral Credit - {credit.referral.referred_name} "
                     f"({credit.period_start.strftime('%m/%d/%Y')} - {credit.period_end.strftime('%m/%d/%Y')})"
+                    + (f" | Invoice #{credit.hubstaff_invoice_number}" if credit.hubstaff_invoice_number else "")
                 )
 
                 await qbo.apply_credit_to_invoice(invoice_id, float(apply_amount), description)
@@ -298,7 +371,6 @@ class CreditService:
                 credit.applied_date = date.today()
                 credit.credit_amount = apply_amount
 
-                # Update referral applied total
                 referral_result = await self.db.execute(
                     select(Referral).where(Referral.id == credit.referral_id)
                 )
@@ -319,14 +391,12 @@ class CreditService:
         await self.db.flush()
         return {
             "applied": applied,
+            "skipped": skipped,
             "total_applied": float(total_applied),
         }
 
     async def check_and_expire_referrals(self) -> int:
-        """
-        Check all active referrals and mark expired ones.
-        Called by scheduler.
-        """
+        """Mark referrals as expired after 365 effective active days."""
         result = await self.db.execute(
             select(Referral).where(
                 Referral.is_active == True,

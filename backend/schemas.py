@@ -203,6 +203,8 @@ class CreditLedgerOut(BaseModel):
     hours_worked: Decimal
     credit_amount: Decimal
     status: CreditStatus
+    hubstaff_invoice_id: Optional[str] = None
+    hubstaff_invoice_number: Optional[str] = None
     qbo_invoice_id: Optional[str] = None
     applied_date: Optional[date] = None
     notes: Optional[str] = None

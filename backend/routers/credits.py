@@ -1,7 +1,9 @@
+import uuid
 from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
@@ -10,6 +12,11 @@ from auth import get_current_active_user, require_admin, require_admin_only
 from database import get_db
 from models import CreditLedger, Referral, User, UserRole, CreditStatus
 from schemas import CreditLedgerOut, CreditSummary, MessageResponse
+
+
+class CreditUpdate(BaseModel):
+    credit_amount: Optional[Decimal] = None
+    notes: Optional[str] = None
 
 router = APIRouter()
 
@@ -117,6 +124,82 @@ async def run_credit_automation(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Automation failed: {str(e)}")
+
+
+@router.put("/{credit_id}", response_model=CreditLedgerOut)
+async def update_credit(
+    credit_id: uuid.UUID,
+    updates: CreditUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Manually edit a credit entry's amount or notes."""
+    result = await db.execute(
+        select(CreditLedger)
+        .where(CreditLedger.id == credit_id)
+        .options(selectinload(CreditLedger.referral))
+    )
+    credit = result.scalar_one_or_none()
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit entry not found")
+
+    if updates.credit_amount is not None:
+        old_amount = Decimal(str(credit.credit_amount))
+        new_amount = updates.credit_amount.quantize(Decimal("0.01"))
+        credit.credit_amount = new_amount
+
+        # Update referral total_credits_earned
+        referral_result = await db.execute(
+            select(Referral).where(Referral.id == credit.referral_id)
+        )
+        referral = referral_result.scalar_one_or_none()
+        if referral:
+            referral.total_credits_earned = (
+                Decimal(str(referral.total_credits_earned)) - old_amount + new_amount
+            )
+
+        credit.notes = (
+            (credit.notes or "") + f" [Manually adjusted on {__import__('datetime').date.today()}]"
+        ).strip()
+
+    if updates.notes is not None:
+        credit.notes = updates.notes
+
+    await db.commit()
+    await db.refresh(credit)
+    return credit
+
+
+@router.post("/{credit_id}/recalculate", response_model=CreditLedgerOut)
+async def recalculate_credit(
+    credit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Re-fetch the Hubstaff invoice and recalculate this credit entry."""
+    result = await db.execute(
+        select(CreditLedger).where(CreditLedger.id == credit_id)
+    )
+    credit = result.scalar_one_or_none()
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit entry not found")
+    if not credit.hubstaff_invoice_id:
+        raise HTTPException(status_code=400, detail="This credit has no Hubstaff invoice linked — cannot recalculate")
+
+    try:
+        from services.credit_service import CreditService
+        service = CreditService(db)
+        updated = await service.recalculate_credit(credit_id)
+        await db.commit()
+
+        result2 = await db.execute(
+            select(CreditLedger)
+            .where(CreditLedger.id == credit_id)
+            .options(selectinload(CreditLedger.referral))
+        )
+        return result2.scalar_one()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Recalculation failed: {str(e)}")
 
 
 @router.post("/apply", response_model=MessageResponse)

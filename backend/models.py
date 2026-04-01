@@ -148,6 +148,8 @@ class CreditLedger(Base):
     hours_worked: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     credit_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     status: Mapped[CreditStatus] = mapped_column(SAEnum(CreditStatus), nullable=False, default=CreditStatus.pending)
+    hubstaff_invoice_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True, unique=True)
+    hubstaff_invoice_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     qbo_invoice_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     applied_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

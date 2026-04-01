@@ -104,6 +104,42 @@ class HubstaffService:
                 url = next_link if next_link else None
         return all_projects
 
+    async def get_invoices(self, organization_id: str, project_id: Optional[str] = None) -> list:
+        """
+        Fetch all invoices for the organization, optionally filtered by project.
+        Returns invoices with their line items.
+        """
+        url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/invoices"
+        params: dict = {"page_size": 100}
+        if project_id:
+            params["project_ids[]"] = project_id
+
+        all_invoices = []
+        async with httpx.AsyncClient(timeout=60) as client:
+            while url:
+                response = await client.get(url, headers=self.headers, params=params)
+                response.raise_for_status()
+                data = response.json()
+                invoices = data.get("invoices", [])
+                all_invoices.extend(invoices)
+                pagination = data.get("pagination", {})
+                next_link = pagination.get("next_link")
+                if next_link:
+                    url = next_link
+                    params = {}
+                else:
+                    break
+        return all_invoices
+
+    async def get_invoice(self, invoice_id: str) -> dict:
+        """Fetch a single invoice with full line item details."""
+        url = f"{HUBSTAFF_API_BASE}/invoices/{invoice_id}"
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(url, headers=self.headers)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("invoice", data)
+
     async def register_webhook(self, organization_id: str, target_url: str) -> dict:
         """
         POST /organizations/{id}/webhooks
@@ -111,7 +147,7 @@ class HubstaffService:
         """
         url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/webhooks"
         payload = {
-            "event_type": ["timer.start", "timer.stop"],
+            "events": ["timer.start", "timer.stop"],
             "target_url": target_url,
         }
         async with httpx.AsyncClient(timeout=30) as client:
