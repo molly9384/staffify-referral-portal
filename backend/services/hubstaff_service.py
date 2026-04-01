@@ -46,9 +46,9 @@ class HubstaffService:
                     "grant_type": "authorization_code",
                     "code": code,
                     "redirect_uri": f"{settings.BASE_URL}/hubstaff/callback",
+                    "client_id": settings.HUBSTAFF_CLIENT_ID,
+                    "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
                 },
-                # Hubstaff requires client credentials via HTTP Basic Auth
-                auth=(settings.HUBSTAFF_CLIENT_ID, settings.HUBSTAFF_CLIENT_SECRET),
             )
             if not response.is_success:
                 raise Exception(f"Token exchange failed ({response.status_code}): {response.text}")
@@ -66,8 +66,9 @@ class HubstaffService:
                 data={
                     "grant_type": "refresh_token",
                     "refresh_token": settings.HUBSTAFF_REFRESH_TOKEN,
+                    "client_id": settings.HUBSTAFF_CLIENT_ID,
+                    "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
                 },
-                auth=(settings.HUBSTAFF_CLIENT_ID, settings.HUBSTAFF_CLIENT_SECRET),
             )
             response.raise_for_status()
             return response.json()
