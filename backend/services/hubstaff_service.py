@@ -26,11 +26,13 @@ class HubstaffService:
     def get_auth_url() -> str:
         """Generate the Hubstaff OAuth2 authorization URL."""
         from urllib.parse import urlencode
+        import secrets
         params = {
             "response_type": "code",
             "client_id": settings.HUBSTAFF_CLIENT_ID,
             "redirect_uri": f"{settings.BASE_URL}/hubstaff/callback",
             "scope": "hubstaff:read hubstaff:write",
+            "nonce": secrets.token_urlsafe(16),
         }
         return f"{HUBSTAFF_AUTH_URL}?{urlencode(params)}"
 
