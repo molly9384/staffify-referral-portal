@@ -48,8 +48,12 @@ class HubstaffService:
                     "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
                 },
             )
-            response.raise_for_status()
-            return response.json()
+            if not response.is_success:
+                raise Exception(f"Token exchange failed ({response.status_code}): {response.text}")
+            data = response.json()
+            if "error" in data:
+                raise Exception(f"Token exchange error: {data.get('error_description', data['error'])}")
+            return data
 
     @staticmethod
     async def refresh_access_token() -> dict:

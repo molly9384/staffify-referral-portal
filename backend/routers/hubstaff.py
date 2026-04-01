@@ -26,6 +26,21 @@ async def hubstaff_connect():
     return RedirectResponse(url=auth_url)
 
 
+@router.get("/hubstaff/debug-config")
+async def hubstaff_debug_config():
+    """Temporary debug endpoint — shows OAuth config (no secrets)."""
+    from services.hubstaff_service import HubstaffService
+    auth_url = HubstaffService.get_auth_url()
+    return {
+        "client_id_set": bool(settings.HUBSTAFF_CLIENT_ID),
+        "client_id_preview": settings.HUBSTAFF_CLIENT_ID[:8] + "…" if settings.HUBSTAFF_CLIENT_ID else "(empty)",
+        "client_secret_set": bool(settings.HUBSTAFF_CLIENT_SECRET),
+        "base_url": settings.BASE_URL,
+        "frontend_url": settings.FRONTEND_URL,
+        "auth_url": auth_url,
+    }
+
+
 @router.get("/hubstaff/callback")
 async def hubstaff_callback(code: str = None, error: str = None, db: AsyncSession = Depends(get_db)):
     """Handle OAuth callback from Hubstaff. Exchanges code for tokens and persists to DB."""
