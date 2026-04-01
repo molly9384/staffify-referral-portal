@@ -39,17 +39,29 @@ class HubstaffService:
     @staticmethod
     async def exchange_code_for_tokens(code: str) -> dict:
         """Exchange authorization code for access + refresh tokens."""
+        from urllib.parse import urlencode
+        payload = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": f"{settings.BASE_URL}/hubstaff/callback",
+            "client_id": settings.HUBSTAFF_CLIENT_ID,
+            "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
+        }
+        print(f"[Hubstaff] Token exchange to: {HUBSTAFF_TOKEN_URL}")
+        print(f"[Hubstaff] client_id length: {len(settings.HUBSTAFF_CLIENT_ID)}, secret length: {len(settings.HUBSTAFF_CLIENT_SECRET)}")
+        print(f"[Hubstaff] redirect_uri: {settings.BASE_URL}/hubstaff/callback")
+        print(f"[Hubstaff] code (first 10): {code[:10]}")
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 HUBSTAFF_TOKEN_URL,
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": f"{settings.BASE_URL}/hubstaff/callback",
-                    "client_id": settings.HUBSTAFF_CLIENT_ID,
-                    "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
+                content=urlencode(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json",
                 },
             )
+            print(f"[Hubstaff] Response status: {response.status_code}")
+            print(f"[Hubstaff] Response body: {response.text}")
             if not response.is_success:
                 raise Exception(f"Token exchange failed ({response.status_code}): {response.text}")
             data = response.json()
