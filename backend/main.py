@@ -9,6 +9,22 @@ from routers import auth, clients, referrals, vas, credits, hubstaff, qbo, dashb
 from scheduler import start_scheduler, stop_scheduler
 
 
+async def load_system_config():
+    """Load persisted settings (e.g. Hubstaff OAuth tokens) from DB into the settings object."""
+    from sqlalchemy import select
+    from database import AsyncSessionLocal
+    from models import SystemConfig
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(SystemConfig))
+            rows = result.scalars().all()
+            for row in rows:
+                if hasattr(settings, row.key) and row.value:
+                    setattr(settings, row.key, row.value)
+    except Exception as e:
+        print(f"Config load skipped: {e}")
+
+
 async def create_admin_user():
     """Create default admin user if they don't exist yet."""
     from sqlalchemy import select
@@ -43,6 +59,9 @@ async def lifespan(app: FastAPI):
 
     # Create admin user if none exists
     await create_admin_user()
+
+    # Load persisted OAuth tokens and other config from DB
+    await load_system_config()
 
     # Start the bi-weekly credit automation scheduler
     start_scheduler()

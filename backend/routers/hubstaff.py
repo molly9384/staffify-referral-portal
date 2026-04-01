@@ -27,8 +27,8 @@ async def hubstaff_connect():
 
 
 @router.get("/hubstaff/callback")
-async def hubstaff_callback(code: str = None, error: str = None):
-    """Handle OAuth callback from Hubstaff. Exchanges code for tokens and saves to env."""
+async def hubstaff_callback(code: str = None, error: str = None, db: AsyncSession = Depends(get_db)):
+    """Handle OAuth callback from Hubstaff. Exchanges code for tokens and persists to DB."""
     if error:
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/#/internal/settings?hubstaff_error={error}"
@@ -38,6 +38,7 @@ async def hubstaff_callback(code: str = None, error: str = None):
 
     try:
         from services.hubstaff_service import HubstaffService
+        from models import SystemConfig
         tokens = await HubstaffService.exchange_code_for_tokens(code)
         access_token = tokens.get("access_token", "")
         refresh_token = tokens.get("refresh_token", "")
@@ -45,13 +46,19 @@ async def hubstaff_callback(code: str = None, error: str = None):
         if not access_token:
             raise HTTPException(status_code=400, detail="No access token in response")
 
-        # Persist tokens to Render environment via env vars
-        # In production these get stored as env vars; for now write to settings object
-        # and instruct admin to save via the settings page
-        import os
-        os.environ["HUBSTAFF_ACCESS_TOKEN"] = access_token
-        os.environ["HUBSTAFF_REFRESH_TOKEN"] = refresh_token
-        # Reload settings
+        # Persist tokens to database so they survive restarts and multi-worker deployments
+        for key, value in [
+            ("HUBSTAFF_ACCESS_TOKEN", access_token),
+            ("HUBSTAFF_REFRESH_TOKEN", refresh_token),
+        ]:
+            existing = await db.get(SystemConfig, key)
+            if existing:
+                existing.value = value
+            else:
+                db.add(SystemConfig(key=key, value=value))
+        await db.commit()
+
+        # Also update in-memory settings for the current process
         settings.HUBSTAFF_ACCESS_TOKEN = access_token
         settings.HUBSTAFF_REFRESH_TOKEN = refresh_token
 

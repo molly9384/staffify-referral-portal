@@ -11,17 +11,19 @@ export default function Settings() {
   const [hubstaffChecking, setHubstaffChecking] = useState(true)
 
   useEffect(() => {
-    // Check Hubstaff connection status
-    apiClient.get('/api/hubstaff/status').then(r => {
-      setHubstaffConnected(r.data.connected)
-    }).catch(() => {}).finally(() => setHubstaffChecking(false))
-
-    // Check for redirect params from OAuth callback
+    // Check for redirect params from OAuth callback first
     const hash = window.location.hash
     if (hash.includes('hubstaff_connected=true')) {
       setHubstaffConnected(true)
-      window.history.replaceState(null, '', window.location.pathname)
+      setHubstaffChecking(false)
+      window.history.replaceState(null, '', window.location.pathname + '#/internal/settings')
+      return
     }
+
+    // Otherwise check current connection status from backend
+    apiClient.get('/api/hubstaff/status').then(r => {
+      setHubstaffConnected(r.data.connected)
+    }).catch(() => {}).finally(() => setHubstaffChecking(false))
   }, [])
 
   // Profile state
