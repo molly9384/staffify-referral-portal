@@ -65,19 +65,59 @@ class HubstaffService:
 
     @staticmethod
     async def refresh_access_token() -> dict:
-        """Use the refresh token to get a new access token."""
+        """Use the refresh token to get a new access token and persist it to DB."""
+        from urllib.parse import urlencode
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 HUBSTAFF_TOKEN_URL,
-                data={
+                content=urlencode({
                     "grant_type": "refresh_token",
                     "refresh_token": settings.HUBSTAFF_REFRESH_TOKEN,
                     "client_id": settings.HUBSTAFF_CLIENT_ID,
                     "client_secret": settings.HUBSTAFF_CLIENT_SECRET,
-                },
+                }).encode("utf-8"),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+
+        new_access = data.get("access_token", "")
+        new_refresh = data.get("refresh_token", settings.HUBSTAFF_REFRESH_TOKEN)
+        settings.HUBSTAFF_ACCESS_TOKEN = new_access
+        settings.HUBSTAFF_REFRESH_TOKEN = new_refresh
+
+        # Persist to DB so tokens survive restarts
+        try:
+            from database import AsyncSessionLocal
+            from models import SystemConfig
+            async with AsyncSessionLocal() as db:
+                for key, value in [
+                    ("HUBSTAFF_ACCESS_TOKEN", new_access),
+                    ("HUBSTAFF_REFRESH_TOKEN", new_refresh),
+                ]:
+                    existing = await db.get(SystemConfig, key)
+                    if existing:
+                        existing.value = value
+                    else:
+                        db.add(SystemConfig(key=key, value=value))
+                await db.commit()
+        except Exception as e:
+            print(f"Warning: could not persist refreshed Hubstaff tokens: {e}")
+
+        return data
+
+    async def _make_request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """Make a Hubstaff API request, auto-refreshing the token on 401."""
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.request(method, url, headers=self.headers, **kwargs)
+            if response.status_code == 401:
+                # Token expired — refresh and retry once
+                await self.refresh_access_token()
+                self.token = settings.HUBSTAFF_ACCESS_TOKEN
+                self.headers["Authorization"] = f"Bearer {self.token}"
+                response = await client.request(method, url, headers=self.headers, **kwargs)
+            response.raise_for_status()
+            return response
 
     @staticmethod
     def is_connected() -> bool:
@@ -86,11 +126,8 @@ class HubstaffService:
 
     async def get_project_members(self, project_id: str) -> list:
         url = f"{HUBSTAFF_API_BASE}/projects/{project_id}/members"
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(url, headers=self.headers)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("members", [])
+        response = await self._make_request("GET", url)
+        return response.json().get("members", [])
 
     async def get_activities(
         self,
@@ -114,22 +151,14 @@ class HubstaffService:
             params["user_ids"] = user_id
 
         all_activities = []
-        async with httpx.AsyncClient(timeout=60) as client:
-            while url:
-                response = await client.get(url, headers=self.headers, params=params)
-                response.raise_for_status()
-                data = response.json()
-                activities = data.get("daily_activities", [])
-                all_activities.extend(activities)
-
-                # Handle pagination
-                pagination = data.get("pagination", {})
-                next_link = pagination.get("next_link")
-                if next_link:
-                    url = next_link
-                    params = {}  # params already encoded in next_link
-                else:
-                    break
+        first = True
+        while url:
+            response = await self._make_request("GET", url, params=params if first else {})
+            first = False
+            data = response.json()
+            all_activities.extend(data.get("daily_activities", []))
+            next_link = data.get("pagination", {}).get("next_link")
+            url = next_link if next_link else None
 
         return all_activities
 
@@ -137,37 +166,27 @@ class HubstaffService:
         """Fetch all members (users) for the organization."""
         url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/members"
         all_members = []
-        async with httpx.AsyncClient(timeout=30) as client:
-            while url:
-                response = await client.get(url, headers=self.headers)
-                response.raise_for_status()
-                data = response.json()
-                members = data.get("members", [])
-                all_members.extend(members)
-                pagination = data.get("pagination", {})
-                next_link = pagination.get("next_link")
-                url = next_link if next_link else None
+        while url:
+            response = await self._make_request("GET", url)
+            data = response.json()
+            all_members.extend(data.get("members", []))
+            url = data.get("pagination", {}).get("next_link")
         return all_members
 
     async def get_projects(self, organization_id: str) -> list:
         """Fetch all projects for the org."""
         url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/projects"
         all_projects = []
-        async with httpx.AsyncClient(timeout=30) as client:
-            while url:
-                response = await client.get(url, headers=self.headers)
-                response.raise_for_status()
-                data = response.json()
-                projects = data.get("projects", [])
-                for p in projects:
-                    all_projects.append({
-                        "id": str(p.get("id", "")),
-                        "name": p.get("name", ""),
-                        "status": p.get("status"),
-                    })
-                pagination = data.get("pagination", {})
-                next_link = pagination.get("next_link")
-                url = next_link if next_link else None
+        while url:
+            response = await self._make_request("GET", url)
+            data = response.json()
+            for p in data.get("projects", []):
+                all_projects.append({
+                    "id": str(p.get("id", "")),
+                    "name": p.get("name", ""),
+                    "status": p.get("status"),
+                })
+            url = data.get("pagination", {}).get("next_link")
         return all_projects
 
     async def get_invoices(self, organization_id: str, project_id: Optional[str] = None) -> list:
@@ -181,30 +200,28 @@ class HubstaffService:
             params["project_ids[]"] = project_id
 
         all_invoices = []
-        async with httpx.AsyncClient(timeout=60) as client:
-            while url:
-                response = await client.get(url, headers=self.headers, params=params)
-                response.raise_for_status()
-                data = response.json()
-                invoices = data.get("invoices", [])
-                all_invoices.extend(invoices)
-                pagination = data.get("pagination", {})
-                next_link = pagination.get("next_link")
-                if next_link:
-                    url = next_link
-                    params = {}
-                else:
-                    break
+        first = True
+        while url:
+            response = await self._make_request("GET", url, params=params if first else {})
+            first = False
+            data = response.json()
+            invoices = data.get("invoices", [])
+            all_invoices.extend(invoices)
+            pagination = data.get("pagination", {})
+            next_link = pagination.get("next_link")
+            if next_link:
+                url = next_link
+                params = {}
+            else:
+                break
         return all_invoices
 
     async def get_invoice(self, invoice_id: str) -> dict:
         """Fetch a single invoice with full line item details."""
         url = f"{HUBSTAFF_API_BASE}/invoices/{invoice_id}"
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(url, headers=self.headers)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("invoice", data)
+        response = await self._make_request("GET", url)
+        data = response.json()
+        return data.get("invoice", data)
 
     async def register_webhook(self, organization_id: str, target_url: str) -> dict:
         """
@@ -216,10 +233,8 @@ class HubstaffService:
             "events": ["timer.start", "timer.stop"],
             "target_url": target_url,
         }
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(url, headers=self.headers, json=payload)
-            response.raise_for_status()
-            return response.json()
+        response = await self._make_request("POST", url, json=payload)
+        return response.json()
 
     @staticmethod
     def verify_webhook_secret(x_hook_secret: str) -> str:
