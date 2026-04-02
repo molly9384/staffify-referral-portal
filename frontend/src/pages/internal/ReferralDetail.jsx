@@ -359,7 +359,7 @@ export default function ReferralDetail() {
                   ))}
                 </select>
               </div>
-              {['contract_signed','va_hired','va_billing','active'].includes(statusForm.status) && (
+              {['va_billing','active'].includes(statusForm.status) && (
                 <div>
                   <label className="label">
                     Activation Date
