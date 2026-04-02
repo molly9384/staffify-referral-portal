@@ -42,7 +42,7 @@ export default function PipelineStage({ status }) {
                     isDone
                       ? 'bg-primary-600 border-primary-600 text-white'
                       : isCurrent
-                      ? 'bg-white border-primary-600 text-primary-600'
+                      ? 'bg-green-500 border-green-500 text-white'
                       : 'bg-white border-gray-300 text-gray-400'
                   }`}
                 >
@@ -56,7 +56,7 @@ export default function PipelineStage({ status }) {
                 </div>
                 <span
                   className={`mt-1.5 text-xs whitespace-nowrap hidden sm:block ${
-                    isCurrent ? 'text-primary-700 font-semibold' : isDone ? 'text-gray-500' : 'text-gray-400'
+                    isCurrent ? 'text-green-600 font-semibold' : isDone ? 'text-gray-500' : 'text-gray-400'
                   }`}
                 >
                   {stage.label}

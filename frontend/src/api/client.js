@@ -140,6 +140,9 @@ export const recalculateCredit = (id) =>
 export const getHubstaffProjects = () =>
   apiClient.get('/hubstaff/projects').then((r) => r.data)
 
+export const getHubstaffProjectMembers = (projectId) =>
+  apiClient.get(`/hubstaff/project-members/${projectId}`).then((r) => r.data)
+
 export const registerHubstaffWebhook = () =>
   apiClient.post('/hubstaff/register-webhook').then((r) => r.data)
 

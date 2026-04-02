@@ -158,12 +158,28 @@ async def update_referral_status(
     if not referral:
         raise HTTPException(status_code=404, detail="Referral not found")
 
-    referral.status = status_update.status
+    from models import Client
+    new_status = status_update.status
+    referral.status = new_status
+
     if status_update.notes:
         existing_notes = referral.pipeline_notes or ""
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d")
         referral.pipeline_notes = f"{existing_notes}\n[{timestamp}] {status_update.notes}".strip()
+
+    # Auto-link referred client when contract is signed
+    if new_status == ReferralStatus.contract_signed and not referral.referred_client_id:
+        client_result = await db.execute(
+            select(Client).where(Client.name == referral.referred_name)
+        )
+        matched_client = client_result.scalar_one_or_none()
+        if matched_client:
+            referral.referred_client_id = matched_client.id
+
+    # Auto-set activation date when VA billing starts
+    if new_status == ReferralStatus.va_billing and not referral.activation_date:
+        referral.activation_date = date.today()
 
     await db.flush()
     await db.refresh(referral)
