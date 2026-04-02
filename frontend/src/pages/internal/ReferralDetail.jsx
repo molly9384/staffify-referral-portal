@@ -21,7 +21,7 @@ export default function ReferralDetail() {
   const [showTerminateModal, setShowTerminateModal] = useState(false)
   const [selectedVA, setSelectedVA] = useState(null)
 
-  const [statusForm, setStatusForm] = useState({ status: '', notes: '' })
+  const [statusForm, setStatusForm] = useState({ status: '', notes: '', activation_date: '' })
   const [vaForm, setVAForm] = useState({ hubstaff_user_name: '', hubstaff_user_id: '', start_date: new Date().toISOString().split('T')[0] })
   const [projectMembers, setProjectMembers] = useState([])
   const [membersLoading, setMembersLoading] = useState(false)
@@ -33,7 +33,7 @@ export default function ReferralDetail() {
       const [ref, creds] = await Promise.all([getReferral(id), getReferralCredits(id)])
       setReferral(ref)
       setCredits(creds)
-      setStatusForm((f) => ({ ...f, status: ref.status }))
+      setStatusForm((f) => ({ ...f, status: ref.status, activation_date: ref.activation_date || '' }))
     } catch {
       setError('Failed to load referral.')
     } finally {
@@ -359,6 +359,20 @@ export default function ReferralDetail() {
                   ))}
                 </select>
               </div>
+              {['contract_signed','va_hired','va_billing','active'].includes(statusForm.status) && (
+                <div>
+                  <label className="label">
+                    Activation Date
+                    <span className="text-gray-400 font-normal ml-1">(editable — when billing began)</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={statusForm.activation_date}
+                    onChange={(e) => setStatusForm((f) => ({ ...f, activation_date: e.target.value }))}
+                  />
+                </div>
+              )}
               <div>
                 <label className="label">Notes (appended to log)</label>
                 <textarea

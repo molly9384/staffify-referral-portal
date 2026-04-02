@@ -173,6 +173,7 @@ class ReferralUpdate(BaseModel):
 class ReferralStatusUpdate(BaseModel):
     status: ReferralStatus
     notes: Optional[str] = None
+    activation_date: Optional[date] = None
 
 
 class ReferralOut(ReferralBase):
