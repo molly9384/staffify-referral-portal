@@ -172,18 +172,45 @@ async def update_referral_status(
     if status_update.activation_date:
         referral.activation_date = status_update.activation_date
 
-    # Auto-link referred client whenever status is contract_signed or later (retries on every update)
-    LINKED_STATUSES = {
-        ReferralStatus.contract_signed, ReferralStatus.va_hired,
-        ReferralStatus.va_billing, ReferralStatus.active,
-    }
-    if new_status in LINKED_STATUSES and not referral.referred_client_id:
-        client_result = await db.execute(
-            select(Client).where(Client.name == referral.referred_name)
-        )
-        matched_client = client_result.scalar_one_or_none()
-        if matched_client:
-            referral.referred_client_id = matched_client.id
+    # At VA Billing: auto-create client profile from Hubstaff + QBO if not already linked
+    if new_status == ReferralStatus.va_billing and not referral.referred_client_id:
+        try:
+            from services.hubstaff_service import HubstaffService
+            from services.qbo_service import QBOService
+            from config import settings as app_settings
+
+            hubstaff = HubstaffService()
+            qbo = QBOService()
+
+            # Find matching Hubstaff project by name
+            projects = await hubstaff.get_projects(app_settings.HUBSTAFF_ORG_ID)
+            matched_project = next(
+                (p for p in projects if p.get("name", "").strip().lower() == referral.referred_name.strip().lower()),
+                None
+            )
+
+            # Find matching QBO customer by name
+            qbo_customer = None
+            if qbo.is_connected():
+                try:
+                    qbo_customer = await qbo.find_customer_by_name(referral.referred_name)
+                except Exception:
+                    pass
+
+            # Create the client profile
+            new_client = Client(
+                name=referral.referred_name,
+                email=qbo_customer.get("email") if qbo_customer else None,
+                hubstaff_project_id=matched_project.get("id") if matched_project else None,
+                hubstaff_project_name=matched_project.get("name") if matched_project else None,
+                qbo_customer_id=qbo_customer.get("id") if qbo_customer else None,
+                is_active=True,
+            )
+            db.add(new_client)
+            await db.flush()
+            referral.referred_client_id = new_client.id
+        except Exception as e:
+            print(f"Warning: could not auto-create referred client profile: {e}")
 
     # Auto-set activation date when VA billing starts (only if not manually provided)
     if new_status == ReferralStatus.va_billing and not referral.activation_date and not status_update.activation_date:

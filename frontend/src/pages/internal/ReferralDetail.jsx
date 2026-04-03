@@ -202,7 +202,12 @@ export default function ReferralDetail() {
           {referral.referred_client ? (
             <>
               <p className="text-base font-medium text-gray-900">{referral.referred_client.name}</p>
-              <p className="text-sm text-gray-500">{referral.referred_client.email}</p>
+              {referral.referred_client.email && <p className="text-sm text-gray-500">{referral.referred_client.email}</p>}
+            </>
+          ) : ['contract_signed','va_hired','va_billing','active','paused','expired','ceased'].includes(referral.status) ? (
+            <>
+              <p className="text-base font-medium text-gray-900">{referral.referred_name}</p>
+              <p className="text-xs text-gray-400 italic">Hubstaff profile created at VA Billing</p>
             </>
           ) : (
             <p className="text-sm text-gray-400 italic">Not yet a client</p>
