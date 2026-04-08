@@ -187,14 +187,14 @@ async def get_org_members(
         from services.hubstaff_service import HubstaffService
         service = HubstaffService()
         members = await service.get_organization_members(settings.HUBSTAFF_ORG_ID)
-        return [
-            {
-                "id": str(m.get("user_id", m.get("id", ""))),
-                "name": m.get("name", ""),
-            }
-            for m in members
-            if m.get("name")
-        ]
+        result = []
+        for m in members:
+            user = m.get("user") or m
+            name = user.get("name") or m.get("name", "")
+            uid = str(m.get("user_id") or user.get("id") or "")
+            if name and uid:
+                result.append({"id": uid, "name": name})
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch org members: {str(e)}")
 
@@ -208,14 +208,14 @@ async def get_project_members(
         from services.hubstaff_service import HubstaffService
         service = HubstaffService()
         members = await service.get_project_members(project_id)
-        return [
-            {
-                "id": str(m.get("user_id", m.get("id", ""))),
-                "name": m.get("name", ""),
-            }
-            for m in members
-            if m.get("name")
-        ]
+        result = []
+        for m in members:
+            user = m.get("user") or m
+            name = user.get("name") or m.get("name", "")
+            uid = str(m.get("user_id") or user.get("id") or "")
+            if name and uid:
+                result.append({"id": uid, "name": name})
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch project members: {str(e)}")
 
