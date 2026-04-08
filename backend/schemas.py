@@ -196,6 +196,13 @@ class ReferralOut(ReferralBase):
 
 # --- Credit Ledger Schemas ---
 
+class ReferralBrief(BaseModel):
+    id: uuid.UUID
+    referred_name: str
+
+    model_config = {"from_attributes": True}
+
+
 class CreditLedgerOut(BaseModel):
     id: uuid.UUID
     referral_id: uuid.UUID
@@ -211,7 +218,7 @@ class CreditLedgerOut(BaseModel):
     applied_date: Optional[date] = None
     notes: Optional[str] = None
     created_at: datetime
-    referral: Optional[ReferralOut] = None
+    referral: Optional[ReferralBrief] = None
 
     model_config = {"from_attributes": True}
 

@@ -15,14 +15,19 @@ from models import (
 CREDIT_RATE = Decimal("1.00")  # $1.00 per hour worked by the eligible VA
 
 
-def _parse_hours(quantity) -> Decimal:
+def _parse_hours(item: dict) -> Decimal:
     """
-    Convert a Hubstaff line item quantity to decimal hours.
-    Hubstaff may return hours as a decimal float (e.g. 8.006388...)
-    or as a string. Always returns a Decimal.
+    Extract decimal hours from a Hubstaff invoice line item.
+
+    Auto-generated time-tracking items (generated=True) have quantity=1
+    and store actual tracked seconds in generated_data.duration.
+    Manual line items use quantity directly as hours.
     """
     try:
-        return Decimal(str(quantity)).quantize(Decimal("0.0001"))
+        if item.get("generated"):
+            duration_seconds = item.get("generated_data", {}).get("duration", 0) or 0
+            return (Decimal(str(duration_seconds)) / Decimal("3600")).quantize(Decimal("0.0001"))
+        return Decimal(str(item.get("quantity", 0))).quantize(Decimal("0.0001"))
     except Exception:
         return Decimal("0")
 
@@ -126,8 +131,7 @@ class CreditService:
         for item in line_items:
             description = item.get("description", "")
             if description.startswith(prefix):
-                quantity = _parse_hours(item.get("quantity", 0))
-                total_hours += quantity
+                total_hours += _parse_hours(item)
 
         hours_worked = total_hours.quantize(Decimal("0.01"))
         credit_amount = (hours_worked * CREDIT_RATE).quantize(Decimal("0.01"))
