@@ -214,29 +214,33 @@ class HubstaffService:
         Hubstaff client invoices are not filterable by project_id via the API —
         they are matched by client name after fetching.
         """
-        url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/invoices"
-        params: dict = {"page_size": 100}
-
-        all_invoices = []
-        first = True
-        while url:
-            try:
-                response = await self._make_request("GET", url, params=params if first else {})
-            except Exception as e:
-                if "404" in str(e):
-                    print(f"[DEBUG invoices] 404 — no invoices yet")
-                    return []
-                raise
-            first = False
-            data = response.json()
-            print(f"[DEBUG invoices] fetched {len(data.get('invoices', []))} invoices")
-            invoices = data.get("invoices", [])
-            all_invoices.extend(invoices)
-            pagination = data.get("pagination", {})
-            next_link = pagination.get("next_link")
-            if next_link:
-                url = next_link
-            else:
+        # Try client_invoices endpoint first (Hubstaff v2 uses this for client-facing invoices)
+        for endpoint in ["client_invoices", "invoices"]:
+            url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/{endpoint}"
+            params: dict = {"page_size": 100}
+            all_invoices = []
+            first = True
+            found = False
+            while url:
+                try:
+                    response = await self._make_request("GET", url, params=params if first else {})
+                    found = True
+                except Exception as e:
+                    if "404" in str(e) or "405" in str(e):
+                        print(f"[DEBUG invoices] {endpoint} returned error — trying next")
+                        break
+                    raise
+                first = False
+                data = response.json()
+                print(f"[DEBUG invoices] {endpoint}: fetched {len(data.get('invoices', []))} invoices, keys={list(data.keys())}")
+                invoices = data.get("invoices", [])
+                all_invoices.extend(invoices)
+                next_link = data.get("pagination", {}).get("next_link")
+                if next_link:
+                    url = next_link
+                else:
+                    break
+            if found and all_invoices:
                 break
 
         # Filter by client name if provided
