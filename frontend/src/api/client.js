@@ -143,6 +143,9 @@ export const getHubstaffProjects = () =>
 export const getHubstaffProjectMembers = (projectId) =>
   apiClient.get(`/hubstaff/project-members/${projectId}`).then((r) => r.data)
 
+export const getHubstaffOrgMembers = () =>
+  apiClient.get('/hubstaff/org-members').then((r) => r.data)
+
 export const registerHubstaffWebhook = () =>
   apiClient.post('/hubstaff/register-webhook').then((r) => r.data)
 

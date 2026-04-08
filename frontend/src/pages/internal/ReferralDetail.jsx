@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getReferral, getReferralCredits, updateReferralStatus,
-  addVA, terminateVA, setEligibleVA, getHubstaffProjectMembers
+  addVA, terminateVA, setEligibleVA, getHubstaffProjectMembers, getHubstaffOrgMembers
 } from '../../api/client'
 import PipelineStage from '../../components/PipelineStage'
 import VATimeline from '../../components/VATimeline'
@@ -57,6 +57,11 @@ export default function ReferralDetail() {
       await updateReferralStatus(id, payload)
       await load()
       setShowStatusModal(false)
+      // Auto-prompt Add VA modal when moving to VA Billing
+      if (payload.status === 'va_billing') {
+        const updated = await getReferral(id)
+        setTimeout(() => openAddVAModal(updated), 300)
+      }
     } catch (err) {
       setStatusError(err?.response?.data?.detail || 'Failed to update status.')
     } finally {
@@ -80,21 +85,22 @@ export default function ReferralDetail() {
     }
   }
 
-  const openAddVAModal = async () => {
+  const openAddVAModal = async (currentReferral) => {
+    const ref = currentReferral || referral
     setVAForm({ hubstaff_user_name: '', hubstaff_user_id: '', start_date: new Date().toISOString().split('T')[0] })
     setProjectMembers([])
     setShowAddVAModal(true)
-    const projectId = referral?.referred_client?.hubstaff_project_id
-    if (projectId) {
-      setMembersLoading(true)
-      try {
-        const members = await getHubstaffProjectMembers(projectId)
-        setProjectMembers(members)
-      } catch {
-        // Fall back to manual entry
-      } finally {
-        setMembersLoading(false)
-      }
+    setMembersLoading(true)
+    try {
+      const projectId = ref?.referred_client?.hubstaff_project_id
+      const members = projectId
+        ? await getHubstaffProjectMembers(projectId)
+        : await getHubstaffOrgMembers()
+      setProjectMembers(members.sort((a, b) => a.name.localeCompare(b.name)))
+    } catch {
+      // Fall back to manual entry
+    } finally {
+      setMembersLoading(false)
     }
   }
 

@@ -179,6 +179,26 @@ async def register_hubstaff_webhook(
         raise HTTPException(status_code=500, detail=f"Failed to register webhook: {str(e)}")
 
 
+@router.get("/api/hubstaff/org-members")
+async def get_org_members(
+    current_user: User = Depends(require_admin),
+):
+    try:
+        from services.hubstaff_service import HubstaffService
+        service = HubstaffService()
+        members = await service.get_organization_members(settings.HUBSTAFF_ORG_ID)
+        return [
+            {
+                "id": str(m.get("user_id", m.get("id", ""))),
+                "name": m.get("name", ""),
+            }
+            for m in members
+            if m.get("name")
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch org members: {str(e)}")
+
+
 @router.get("/api/hubstaff/project-members/{project_id}")
 async def get_project_members(
     project_id: str,
