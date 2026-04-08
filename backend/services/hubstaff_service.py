@@ -222,9 +222,9 @@ class HubstaffService:
             if not hubstaff_client_id:
                 return []
 
-        # Fetch all invoices (paginate through all pages)
+        # Fetch invoices filtered by client_id directly
         url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/client_invoices"
-        params: dict = {"page_size": 100}
+        params: dict = {"page_size": 100, "client_ids[]": hubstaff_client_id}
         all_invoices = []
         while url:
             try:
@@ -235,7 +235,9 @@ class HubstaffService:
                 raise
             params = {}
             data = response.json()
-            all_invoices.extend(data.get("client_invoices") or data.get("invoices", []))
+            page = data.get("client_invoices") or data.get("invoices", [])
+            all_invoices.extend(page)
+            print(f"[DEBUG invoices] page fetched {len(page)} invoices, total so far: {len(all_invoices)}")
             url = data.get("pagination", {}).get("next_link")
 
         print(f"[DEBUG invoices] fetched {len(all_invoices)} total invoices")
