@@ -221,9 +221,17 @@ class HubstaffService:
         all_invoices = []
         first = True
         while url:
-            response = await self._make_request("GET", url, params=params if first else {})
+            try:
+                response = await self._make_request("GET", url, params=params if first else {})
+            except Exception as e:
+                # 404 means no invoices exist yet for this project — return empty list
+                if "404" in str(e):
+                    print(f"[DEBUG invoices] 404 for project {project_id} — no invoices yet")
+                    return []
+                raise
             first = False
             data = response.json()
+            print(f"[DEBUG invoices] raw response keys: {list(data.keys())}, invoices count: {len(data.get('invoices', []))}")
             invoices = data.get("invoices", [])
             all_invoices.extend(invoices)
             pagination = data.get("pagination", {})
