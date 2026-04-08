@@ -222,9 +222,9 @@ class HubstaffService:
             if not hubstaff_client_id:
                 return []
 
-        # Fetch all invoices sorted newest first
+        # Fetch all invoices (paginate through all pages)
         url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/client_invoices"
-        params: dict = {"page_size": 100, "sort_by": "created_at", "sort_direction": "desc"}
+        params: dict = {"page_size": 100}
         all_invoices = []
         while url:
             try:
@@ -239,14 +239,17 @@ class HubstaffService:
             url = data.get("pagination", {}).get("next_link")
 
         print(f"[DEBUG invoices] fetched {len(all_invoices)} total invoices")
+        unique_statuses = list({inv.get("status", "") for inv in all_invoices})
+        print(f"[DEBUG invoices] unique statuses: {unique_statuses}")
 
-        # Filter to matching client and open/draft status only
+        # Filter to matching client and non-closed status
         matched = []
         for inv in all_invoices:
             if hubstaff_client_id and str(inv.get("client_id", "")) != str(hubstaff_client_id):
                 continue
             status = (inv.get("status") or "").lower()
-            if status not in ("draft", "open", ""):
+            # Exclude only definitively closed/paid invoices
+            if status in ("closed", "paid", "cancelled", "canceled", "void", "voided"):
                 continue
             matched.append(inv)
 
