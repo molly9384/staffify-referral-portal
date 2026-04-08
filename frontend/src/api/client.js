@@ -75,6 +75,9 @@ export const updateClient = (id, data) =>
 export const getClientReferrals = (id) =>
   apiClient.get(`/clients/${id}/referrals`).then((r) => r.data)
 
+export const deleteClient = (id) =>
+  apiClient.delete(`/clients/${id}`).then((r) => r.data)
+
 // ---- Referrals ----
 
 export const getReferrals = (params) =>

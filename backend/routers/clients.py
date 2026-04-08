@@ -74,6 +74,20 @@ async def update_client(
     return client
 
 
+@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_client(
+    client_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    await db.delete(client)
+    await db.flush()
+
+
 @router.get("/{client_id}/referrals", response_model=List[ReferralOut])
 async def get_client_referrals(
     client_id: uuid.UUID,

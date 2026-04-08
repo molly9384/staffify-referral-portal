@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getClients, createClient, updateClient, getHubstaffProjects, lookupQBOCustomer } from '../../api/client'
+import { getClients, createClient, updateClient, deleteClient, getHubstaffProjects, lookupQBOCustomer } from '../../api/client'
 import { formatDate } from '../../utils/format'
 
 export default function Clients() {
@@ -8,6 +8,7 @@ export default function Clients() {
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingClient, setEditingClient] = useState(null)
+  const [deletingClient, setDeletingClient] = useState(null)
   const [projects, setProjects] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [qboLooking, setQboLooking] = useState(false)
@@ -69,6 +70,21 @@ export default function Clients() {
     loadProjects()
   }
 
+  const handleDelete = async () => {
+    if (!deletingClient) return
+    setSubmitting(true)
+    try {
+      await deleteClient(deletingClient.id)
+      setDeletingClient(null)
+      load()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to delete client.')
+      setDeletingClient(null)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)
@@ -98,17 +114,22 @@ export default function Clients() {
     const project = projects.find((p) => p.id === pid)
     const projectName = project?.name || ''
 
-    // If editing and re-selecting the same project, preserve existing QBO data
-    if (editingClient && pid === editingClient.hubstaff_project_id) {
+    // If editing and re-selecting the same project (by ID or name), preserve existing QBO data
+    const sameAsOriginal =
+      editingClient && (
+        pid === editingClient.hubstaff_project_id ||
+        projectName.trim().toLowerCase() === (editingClient.name || '').trim().toLowerCase()
+      )
+    if (sameAsOriginal && editingClient.qbo_customer_id) {
       setForm((f) => ({
         ...f,
         hubstaff_project_id: pid,
         hubstaff_project_name: projectName,
         name: projectName,
-        qbo_customer_id: editingClient.qbo_customer_id || '',
+        qbo_customer_id: editingClient.qbo_customer_id,
         email: editingClient.email || '',
       }))
-      setQboStatus(editingClient.qbo_customer_id ? 'found' : '')
+      setQboStatus('found')
       return
     }
 
@@ -206,9 +227,12 @@ export default function Clients() {
                       </span>
                     </td>
                     <td className="px-6 py-3.5 text-gray-400 text-xs">{formatDate(client.created_at)}</td>
-                    <td className="px-6 py-3.5 text-right">
-                      <button onClick={() => openEdit(client)} className="text-primary-600 hover:text-primary-700 font-medium">
+                    <td className="px-6 py-3.5 text-right flex items-center justify-end gap-4">
+                      <button onClick={() => openEdit(client)} className="text-primary-600 hover:text-primary-700 font-medium text-sm">
                         Edit
+                      </button>
+                      <button onClick={() => setDeletingClient(client)} className="text-red-500 hover:text-red-700 font-medium text-sm">
+                        Delete
                       </button>
                     </td>
                   </tr>
@@ -218,6 +242,24 @@ export default function Clients() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirm Modal */}
+      {deletingClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-base font-semibold text-gray-900">Delete Client</h2>
+            <p className="text-sm text-gray-600">
+              Are you sure you want to delete <strong>{deletingClient.name}</strong>? This cannot be undone.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setDeletingClient(null)} className="btn-secondary flex-1 justify-center">Cancel</button>
+              <button onClick={handleDelete} disabled={submitting} className="btn-danger flex-1 justify-center">
+                {submitting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Client Modal */}
       {showModal && (
