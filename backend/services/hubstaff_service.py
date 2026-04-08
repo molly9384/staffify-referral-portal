@@ -247,6 +247,9 @@ class HubstaffService:
         # Filter by client name if provided
         if client_name:
             name_lower = client_name.strip().lower()
+            # Log all unique client names to debug mismatches
+            unique_names = list({inv.get("client_name", "") for inv in all_invoices})
+            print(f"[DEBUG invoices] unique client names in invoices: {unique_names[:20]}")
             filtered = [
                 inv for inv in all_invoices
                 if inv.get("client_name", "").strip().lower() == name_lower
