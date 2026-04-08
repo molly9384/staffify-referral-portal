@@ -208,15 +208,14 @@ class HubstaffService:
             url = data.get("pagination", {}).get("next_link")
         return all_projects
 
-    async def get_invoices(self, organization_id: str, project_id: Optional[str] = None) -> list:
+    async def get_invoices(self, organization_id: str, project_id: Optional[str] = None, client_name: Optional[str] = None) -> list:
         """
-        Fetch all invoices for the organization, optionally filtered by project.
-        Returns invoices with their line items.
+        Fetch all client invoices for the organization.
+        Hubstaff client invoices are not filterable by project_id via the API —
+        they are matched by client name after fetching.
         """
         url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/invoices"
         params: dict = {"page_size": 100}
-        if project_id:
-            params["project_ids[]"] = project_id
 
         all_invoices = []
         first = True
@@ -224,23 +223,32 @@ class HubstaffService:
             try:
                 response = await self._make_request("GET", url, params=params if first else {})
             except Exception as e:
-                # 404 means no invoices exist yet for this project — return empty list
                 if "404" in str(e):
-                    print(f"[DEBUG invoices] 404 for project {project_id} — no invoices yet")
+                    print(f"[DEBUG invoices] 404 — no invoices yet")
                     return []
                 raise
             first = False
             data = response.json()
-            print(f"[DEBUG invoices] raw response keys: {list(data.keys())}, invoices count: {len(data.get('invoices', []))}")
+            print(f"[DEBUG invoices] fetched {len(data.get('invoices', []))} invoices")
             invoices = data.get("invoices", [])
             all_invoices.extend(invoices)
             pagination = data.get("pagination", {})
             next_link = pagination.get("next_link")
             if next_link:
                 url = next_link
-                params = {}
             else:
                 break
+
+        # Filter by client name if provided
+        if client_name:
+            name_lower = client_name.strip().lower()
+            filtered = [
+                inv for inv in all_invoices
+                if inv.get("client_name", "").strip().lower() == name_lower
+            ]
+            print(f"[DEBUG invoices] filtered to {len(filtered)} invoices for client '{client_name}'")
+            return filtered
+
         return all_invoices
 
     async def get_invoice(self, invoice_id: str) -> dict:
