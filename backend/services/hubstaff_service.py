@@ -260,12 +260,12 @@ class HubstaffService:
         # Fetch full invoice details to get line items
         full_invoices = []
         for inv in matched:
-            try:
-                full = await self.get_invoice(str(inv.get("id", "")))
+            full = await self.get_invoice(str(inv.get("id", "")), organization_id=organization_id)
+            if full:
                 print(f"[DEBUG invoice] id={full.get('id')} status={full.get('status')} number={full.get('number')} line_items={full.get('line_items', [])}")
                 full_invoices.append(full)
-            except Exception as e:
-                print(f"[DEBUG invoice] failed to fetch full invoice {inv.get('id')}: {e}")
+            else:
+                print(f"[DEBUG invoice] all endpoints failed for invoice {inv.get('id')}, using list data: {inv}")
                 full_invoices.append(inv)
 
         return full_invoices
@@ -288,13 +288,25 @@ class HubstaffService:
             print(f"[DEBUG clients] error fetching clients: {e}")
         return None
 
-    async def get_invoice(self, invoice_id: str) -> dict:
+    async def get_invoice(self, invoice_id: str, organization_id: Optional[str] = None) -> dict:
         """Fetch a single client invoice with full line item details."""
-        url = f"{HUBSTAFF_API_BASE}/client_invoices/{invoice_id}"
-        response = await self._make_request("GET", url)
-        data = response.json()
-        print(f"[DEBUG get_invoice] keys={list(data.keys())} sample={str(data)[:300]}")
-        return data.get("client_invoice") or data.get("invoice") or data
+        # Try org-scoped endpoint first, then global
+        urls = []
+        if organization_id:
+            urls.append(f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/client_invoices/{invoice_id}")
+        urls.append(f"{HUBSTAFF_API_BASE}/client_invoices/{invoice_id}")
+        urls.append(f"{HUBSTAFF_API_BASE}/invoices/{invoice_id}")
+
+        for url in urls:
+            try:
+                response = await self._make_request("GET", url)
+                data = response.json()
+                print(f"[DEBUG get_invoice] SUCCESS url={url} keys={list(data.keys())} sample={str(data)[:400]}")
+                return data.get("client_invoice") or data.get("invoice") or data
+            except Exception as e:
+                print(f"[DEBUG get_invoice] FAIL url={url} error={e}")
+                continue
+        return {}
 
     async def register_webhook(self, organization_id: str, target_url: str) -> dict:
         """
