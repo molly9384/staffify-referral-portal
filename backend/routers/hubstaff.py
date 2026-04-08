@@ -214,8 +214,8 @@ async def get_project_members(
         members = await service.get_project_members(project_id)
         result = []
         for m in members:
-            # Only include VAs (role = user), not the client themselves (viewer)
-            if m.get("role") == "viewer":
+            # Only include VAs — role must be "user" (confirmed VA role in Hubstaff)
+            if m.get("role") != "user":
                 continue
             user = m.get("user") or m
             name = user.get("name") or m.get("name", "")
