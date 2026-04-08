@@ -289,11 +289,12 @@ class HubstaffService:
         return None
 
     async def get_invoice(self, invoice_id: str) -> dict:
-        """Fetch a single invoice with full line item details."""
-        url = f"{HUBSTAFF_API_BASE}/invoices/{invoice_id}"
+        """Fetch a single client invoice with full line item details."""
+        url = f"{HUBSTAFF_API_BASE}/client_invoices/{invoice_id}"
         response = await self._make_request("GET", url)
         data = response.json()
-        return data.get("invoice", data)
+        print(f"[DEBUG get_invoice] keys={list(data.keys())} sample={str(data)[:300]}")
+        return data.get("client_invoice") or data.get("invoice") or data
 
     async def register_webhook(self, organization_id: str, target_url: str) -> dict:
         """
