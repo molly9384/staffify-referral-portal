@@ -244,16 +244,26 @@ class HubstaffService:
             if found and all_invoices:
                 break
 
+        # Log first invoice structure to understand the schema
+        if all_invoices:
+            print(f"[DEBUG invoices] first invoice keys: {list(all_invoices[0].keys())}")
+            print(f"[DEBUG invoices] first invoice sample: {all_invoices[0]}")
+
         # Filter by client name if provided
         if client_name:
             name_lower = client_name.strip().lower()
-            # Log all unique client names to debug mismatches
-            unique_names = list({inv.get("client_name", "") for inv in all_invoices})
-            print(f"[DEBUG invoices] unique client names in invoices: {unique_names[:20]}")
-            filtered = [
-                inv for inv in all_invoices
-                if inv.get("client_name", "").strip().lower() == name_lower
-            ]
+            filtered = []
+            for inv in all_invoices:
+                # Try all possible name fields
+                inv_client_name = (
+                    inv.get("client_name") or
+                    inv.get("name") or
+                    (inv.get("client") or {}).get("name") or
+                    (inv.get("client") or {}).get("display_name") or
+                    ""
+                )
+                if inv_client_name.strip().lower() == name_lower:
+                    filtered.append(inv)
             print(f"[DEBUG invoices] filtered to {len(filtered)} invoices for client '{client_name}'")
             return filtered
 
