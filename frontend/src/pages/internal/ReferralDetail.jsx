@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getReferral, getReferralCredits, updateReferralStatus, updateReferral,
-  addVA, terminateVA, setEligibleVA, getHubstaffProjectMembers, getHubstaffOrgMembers
+  addVA, terminateVA, setEligibleVA, getHubstaffProjectMembers, getHubstaffOrgMembers,
+  getHubstaffProjects, updateClient
 } from '../../api/client'
 import PipelineStage from '../../components/PipelineStage'
 import VATimeline from '../../components/VATimeline'
@@ -125,12 +126,33 @@ export default function ReferralDetail() {
     setShowAddVAModal(true)
     setMembersLoading(true)
     try {
-      const projectId = ref?.referred_client?.hubstaff_project_id
+      let projectId = ref?.referred_client?.hubstaff_project_id
+
+      // Auto-link project if client exists but no project is linked yet
+      if (!projectId && ref?.referred_client?.id) {
+        const clientName = (ref.referred_client.name || ref.referred_name || '').trim().toLowerCase()
+        const firstWord = clientName.split(' ')[0]
+        const projects = await getHubstaffProjects()
+        const match =
+          projects.find((p) => p.name.trim().toLowerCase() === clientName) ||
+          projects.find((p) => firstWord && p.name.trim().toLowerCase().startsWith(firstWord))
+        if (match) {
+          await updateClient(ref.referred_client.id, {
+            hubstaff_project_id: match.id,
+            hubstaff_project_name: match.name,
+          })
+          projectId = match.id
+          // Refresh referral so the link is reflected in state
+          const updated = await getReferral(id)
+          setReferral(updated)
+        }
+      }
+
       let members = []
       if (projectId) {
         members = await getHubstaffProjectMembers(projectId)
       }
-      // If no project linked or project returned no members, fall back to org members
+      // Fall back to org members if project not linked or returned empty
       if (!members || members.length === 0) {
         members = await getHubstaffOrgMembers()
       }
