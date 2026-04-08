@@ -115,21 +115,28 @@ class QBOService:
         """Look up a QBO customer by DisplayName. Returns id, display_name, email or None."""
         if not self.realm_id:
             raise ValueError("QBO not connected: no realm_id")
-        # Escape single quotes in name
-        safe_name = display_name.replace("'", "\\'")
-        query = f"SELECT * FROM Customer WHERE DisplayName = '{safe_name}' MAXRESULTS 1"
         url = f"{self.base_url}/{self.realm_id}/query"
+
+        def _extract(c):
+            email = c.get("PrimaryEmailAddr", {}).get("Address", "") if c.get("PrimaryEmailAddr") else ""
+            return {"id": str(c.get("Id", "")), "display_name": c.get("DisplayName", ""), "email": email}
+
+        # Try exact match first
+        safe_name = display_name.strip().replace("'", "\\'")
+        query = f"SELECT * FROM Customer WHERE DisplayName = '{safe_name}' MAXRESULTS 1"
         data = await self._make_request("GET", url, params={"query": query, "minorversion": "65"})
         customers = data.get("QueryResponse", {}).get("Customer", [])
-        if not customers:
-            return None
-        c = customers[0]
-        email = c.get("PrimaryEmailAddr", {}).get("Address", "") if c.get("PrimaryEmailAddr") else ""
-        return {
-            "id": str(c.get("Id", "")),
-            "display_name": c.get("DisplayName", ""),
-            "email": email,
-        }
+        if customers:
+            return _extract(customers[0])
+
+        # Fallback: case-insensitive scan of all customers
+        print(f"[DEBUG QBO] Exact match failed for '{display_name}', trying case-insensitive scan")
+        name_lower = display_name.strip().lower()
+        all_data = await self._make_request("GET", url, params={"query": "SELECT * FROM Customer MAXRESULTS 1000", "minorversion": "65"})
+        for c in all_data.get("QueryResponse", {}).get("Customer", []):
+            if c.get("DisplayName", "").strip().lower() == name_lower:
+                return _extract(c)
+        return None
 
     async def get_customer_invoices(self, customer_id: str, status: str = "Paid") -> list:
         """Get invoices for a customer filtered by status."""

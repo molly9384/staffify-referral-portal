@@ -98,6 +98,20 @@ export default function Clients() {
     const project = projects.find((p) => p.id === pid)
     const projectName = project?.name || ''
 
+    // If editing and re-selecting the same project, preserve existing QBO data
+    if (editingClient && pid === editingClient.hubstaff_project_id) {
+      setForm((f) => ({
+        ...f,
+        hubstaff_project_id: pid,
+        hubstaff_project_name: projectName,
+        name: projectName,
+        qbo_customer_id: editingClient.qbo_customer_id || '',
+        email: editingClient.email || '',
+      }))
+      setQboStatus(editingClient.qbo_customer_id ? 'found' : '')
+      return
+    }
+
     setForm((f) => ({
       ...f,
       hubstaff_project_id: pid,
