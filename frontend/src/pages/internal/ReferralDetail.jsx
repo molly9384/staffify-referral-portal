@@ -43,15 +43,22 @@ export default function ReferralDetail() {
 
   useEffect(() => { load() }, [id])
 
+  const [statusError, setStatusError] = useState('')
+
   const handleStatusUpdate = async (e) => {
     e.preventDefault()
     setSubmitting(true)
+    setStatusError('')
     try {
-      await updateReferralStatus(id, statusForm)
+      const payload = {
+        ...statusForm,
+        activation_date: statusForm.activation_date || null,
+      }
+      await updateReferralStatus(id, payload)
       await load()
       setShowStatusModal(false)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to update status.')
+      setStatusError(err?.response?.data?.detail || 'Failed to update status.')
     } finally {
       setSubmitting(false)
     }
@@ -388,6 +395,9 @@ export default function ReferralDetail() {
                   onChange={(e) => setStatusForm((f) => ({ ...f, notes: e.target.value }))}
                 />
               </div>
+              {statusError && (
+                <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{statusError}</div>
+              )}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowStatusModal(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
                 <button type="submit" disabled={submitting} className="btn-primary flex-1 justify-center">{submitting ? 'Saving…' : 'Update'}</button>
