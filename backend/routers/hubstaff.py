@@ -214,10 +214,9 @@ async def get_project_members(
         members = await service.get_project_members(project_id)
         result = []
         for m in members:
-            role = m.get("role", "")
-            print(f"[DEBUG project-member] role={role!r} member={m}")
-            # Only include VAs — exclude client/viewer/owner/admin roles
-            if role not in ("user", "member"):
+            # membership_role is the actual role field for project members
+            membership_role = m.get("membership_role") or m.get("role", "")
+            if membership_role != "user":
                 continue
             user = m.get("user") or m
             name = user.get("name") or m.get("name", "")
