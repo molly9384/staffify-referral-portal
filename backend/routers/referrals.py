@@ -182,12 +182,19 @@ async def update_referral_status(
             hubstaff = HubstaffService()
             qbo = QBOService()
 
-            # Find matching Hubstaff project by name
+            # Find matching Hubstaff project by name (exact first, then starts-with)
             projects = await hubstaff.get_projects(app_settings.HUBSTAFF_ORG_ID)
+            ref_name_lower = referral.referred_name.strip().lower()
             matched_project = next(
-                (p for p in projects if p.get("name", "").strip().lower() == referral.referred_name.strip().lower()),
-                None
+                (p for p in projects if p.get("name", "").strip().lower() == ref_name_lower), None
             )
+            if not matched_project:
+                # Fallback: first name match (e.g. "Jonathan" matches "Jonathan Gonzales")
+                first_word = ref_name_lower.split()[0] if ref_name_lower else ""
+                matched_project = next(
+                    (p for p in projects if p.get("name", "").strip().lower().startswith(first_word) and first_word),
+                    None
+                )
 
             # Find matching QBO customer by name
             qbo_customer = None

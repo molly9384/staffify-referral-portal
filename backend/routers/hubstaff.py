@@ -189,12 +189,15 @@ async def get_org_members(
         members = await service.get_organization_members(settings.HUBSTAFF_ORG_ID)
         result = []
         for m in members:
+            role = m.get("role", "")
+            if role not in ("user", "member"):
+                continue
             user = m.get("user") or m
             name = user.get("name") or m.get("name", "")
             uid = str(m.get("user_id") or user.get("id") or "")
             if name and uid:
                 result.append({"id": uid, "name": name})
-        return result
+        return sorted(result, key=lambda x: x["name"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch org members: {str(e)}")
 
@@ -210,12 +213,15 @@ async def get_project_members(
         members = await service.get_project_members(project_id)
         result = []
         for m in members:
+            # Only include VAs (role = user), not the client themselves (viewer)
+            if m.get("role") == "viewer":
+                continue
             user = m.get("user") or m
             name = user.get("name") or m.get("name", "")
             uid = str(m.get("user_id") or user.get("id") or "")
             if name and uid:
                 result.append({"id": uid, "name": name})
-        return result
+        return sorted(result, key=lambda x: x["name"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch project members: {str(e)}")
 
