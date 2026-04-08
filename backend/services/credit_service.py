@@ -76,26 +76,36 @@ class CreditService:
         )
         referral = result.scalar_one_or_none()
         if not referral or not referral.is_active:
+            print(f"[DEBUG eligible] FAIL: referral missing or inactive")
             return False
         if referral.status not in (ReferralStatus.active, ReferralStatus.va_billing):
+            print(f"[DEBUG eligible] FAIL: status={referral.status}")
             return False
         if not referral.activation_date:
+            print(f"[DEBUG eligible] FAIL: no activation_date")
             return False
 
-        # Check 12-month window
         effective_days = await self.get_effective_days_elapsed(referral_id)
         if effective_days >= 365:
+            print(f"[DEBUG eligible] FAIL: 12-month window elapsed ({effective_days} days)")
             return False
 
         if not referral.referring_client or not referral.referring_client.is_active:
+            print(f"[DEBUG eligible] FAIL: referring client missing or inactive")
             return False
         if not referral.referred_client or not referral.referred_client.is_active:
+            print(f"[DEBUG eligible] FAIL: referred client missing or inactive")
             return False
         if not referral.referred_client.hubstaff_project_id:
+            print(f"[DEBUG eligible] FAIL: no hubstaff_project_id on referred client")
             return False
 
         eligible_va = await self.get_eligible_va(referral_id)
-        return eligible_va is not None and bool(eligible_va.hubstaff_user_name)
+        if not eligible_va or not eligible_va.hubstaff_user_name:
+            print(f"[DEBUG eligible] FAIL: no eligible VA with hubstaff_user_name")
+            return False
+        print(f"[DEBUG eligible] PASS: eligible_va={eligible_va.hubstaff_user_name}")
+        return True
 
     def calculate_credits_from_invoice(
         self, invoice: dict, va_name: str
@@ -152,7 +162,10 @@ class CreditService:
 
         for referral in active_referrals:
             try:
-                if not await self.is_referral_eligible(referral.id):
+                print(f"[DEBUG credits] Checking referral {referral.id} ({referral.referred_name}), status={referral.status}, referred_client_id={referral.referred_client_id}")
+                eligible = await self.is_referral_eligible(referral.id)
+                print(f"[DEBUG credits] is_eligible={eligible}")
+                if not eligible:
                     continue
 
                 referred_client = referral.referred_client
@@ -310,24 +323,8 @@ class CreditService:
 
         for credit in pending_credits:
             try:
-                # Verify Hubstaff invoice is paid before applying
-                if credit.hubstaff_invoice_id:
-                    try:
-                        invoice = await hubstaff.get_invoice(credit.hubstaff_invoice_id)
-                        invoice_status = invoice.get("status", "")
-                        if invoice_status.lower() != "paid":
-                            credit.notes = (
-                                (credit.notes or "") +
-                                f" [Skipped: Hubstaff invoice status is '{invoice_status}', not paid]"
-                            ).strip()
-                            skipped += 1
-                            continue
-                    except Exception as e:
-                        credit.notes = (
-                            (credit.notes or "") +
-                            f" [Warning: could not verify Hubstaff invoice status: {e}]"
-                        ).strip()
-                        # Continue anyway if we can't check — admin can override
+                # Hubstaff invoices stay as Draft (payment tracked in QBO via Make automation)
+                # so we do not gate on Hubstaff invoice status here
 
                 referring_client = credit.referral.referring_client
                 if not referring_client or not referring_client.qbo_customer_id:

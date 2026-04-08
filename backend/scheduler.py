@@ -60,22 +60,27 @@ async def run_biweekly_credit_job():
 def start_scheduler():
     """
     Register the bi-weekly job and start the APScheduler instance.
-    Runs every 14 days at 6:00 AM on Monday (first occurrence after 14-day interval).
-    In practice, on Render this will fire on the first Monday matching the cron
-    every other week. Adjust as needed.
+    Runs every other Friday at 7:00 AM Eastern, anchored to April 11 2026
+    (the first billing Friday after go-live).
     """
-    # Run every 14 days — APScheduler interval trigger
+    from datetime import datetime
     scheduler.add_job(
         run_biweekly_credit_job,
-        trigger="interval",
-        weeks=2,
+        trigger=CronTrigger(
+            day_of_week="fri",
+            hour=7,
+            minute=0,
+            week="*/2",
+            start_date=datetime(2026, 4, 10, 7, 0, 0),
+            timezone="America/New_York",
+        ),
         id="biweekly_credit_job",
         name="Bi-Weekly Credit Calculation & QBO Application",
         replace_existing=True,
-        misfire_grace_time=3600,  # 1 hour grace if missed
+        misfire_grace_time=3600,  # 1 hour grace if Render restarts around run time
     )
     scheduler.start()
-    logger.info("APScheduler started — bi-weekly credit job registered.")
+    logger.info("APScheduler started — bi-weekly credit job scheduled for every other Friday at 7 AM ET.")
 
 
 def stop_scheduler():
