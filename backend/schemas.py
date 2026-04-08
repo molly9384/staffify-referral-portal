@@ -87,7 +87,7 @@ class ClientOut(ClientBase):
 class ClientSummary(BaseModel):
     id: uuid.UUID
     name: str
-    email: str
+    email: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
