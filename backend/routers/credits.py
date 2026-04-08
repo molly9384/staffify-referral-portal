@@ -202,6 +202,36 @@ async def recalculate_credit(
         raise HTTPException(status_code=500, detail=f"Recalculation failed: {str(e)}")
 
 
+@router.delete("/{credit_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_credit(
+    credit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Hard-delete a credit entry and adjust the referral total."""
+    result = await db.execute(select(CreditLedger).where(CreditLedger.id == credit_id))
+    credit = result.scalar_one_or_none()
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit entry not found")
+
+    # Roll back the referral total
+    referral_result = await db.execute(select(Referral).where(Referral.id == credit.referral_id))
+    referral = referral_result.scalar_one_or_none()
+    if referral:
+        referral.total_credits_earned = max(
+            Decimal("0"),
+            Decimal(str(referral.total_credits_earned)) - Decimal(str(credit.credit_amount)),
+        )
+        if credit.status == CreditStatus.applied:
+            referral.total_credits_applied = max(
+                Decimal("0"),
+                Decimal(str(referral.total_credits_applied)) - Decimal(str(credit.credit_amount)),
+            )
+
+    await db.delete(credit)
+    await db.commit()
+
+
 @router.post("/apply", response_model=MessageResponse)
 async def apply_pending_credits(
     db: AsyncSession = Depends(get_db),

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCredits, getCreditSummary, runCreditAutomation, applyCredits, updateCredit, recalculateCredit } from '../../api/client'
+import { getCredits, getCreditSummary, runCreditAutomation, applyCredits, updateCredit, recalculateCredit, deleteCredit } from '../../api/client'
 import CreditSummaryComponent from '../../components/CreditSummary'
 import { formatDate, formatCurrency } from '../../utils/format'
 
@@ -92,6 +92,7 @@ export default function Credits() {
   const [applyRunning, setApplyRunning] = useState(false)
   const [editingCredit, setEditingCredit] = useState(null)
   const [recalculating, setRecalculating] = useState(null) // credit id
+  const [deletingCredit, setDeletingCredit] = useState(null) // credit id awaiting confirm
 
   const load = async () => {
     setLoading(true)
@@ -148,6 +149,18 @@ export default function Credits() {
       setError(err?.response?.data?.detail || 'Failed to apply credits.')
     } finally {
       setApplyRunning(false)
+    }
+  }
+
+  const handleDelete = async (creditId) => {
+    try {
+      await deleteCredit(creditId)
+      setDeletingCredit(null)
+      setSuccessMsg('Credit deleted.')
+      await Promise.all([load(), loadSummary()])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to delete credit.')
+      setDeletingCredit(null)
     }
   }
 
@@ -322,6 +335,31 @@ export default function Credits() {
                                 </button>
                               )}
                             </>
+                          )}
+                          {deletingCredit === credit.id ? (
+                            <span className="flex items-center gap-1">
+                              <span className="text-xs text-gray-500">Delete?</span>
+                              <button
+                                onClick={() => handleDelete(credit.id)}
+                                className="text-xs text-red-600 hover:text-red-800 font-medium"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                onClick={() => setDeletingCredit(null)}
+                                className="text-xs text-gray-400 hover:text-gray-600 font-medium"
+                              >
+                                No
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setDeletingCredit(credit.id)}
+                              className="text-xs text-red-400 hover:text-red-600 font-medium"
+                              title="Delete credit entry"
+                            >
+                              Delete
+                            </button>
                           )}
                         </div>
                       </td>

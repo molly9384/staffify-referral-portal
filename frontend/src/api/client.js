@@ -138,6 +138,9 @@ export const updateCredit = (id, data) =>
 export const recalculateCredit = (id) =>
   apiClient.post(`/credits/${id}/recalculate`).then((r) => r.data)
 
+export const deleteCredit = (id) =>
+  apiClient.delete(`/credits/${id}`)
+
 // ---- Hubstaff ----
 
 export const getHubstaffProjects = () =>
