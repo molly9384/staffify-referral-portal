@@ -210,53 +210,60 @@ class HubstaffService:
 
     async def get_invoices(self, organization_id: str, project_id: Optional[str] = None, client_name: Optional[str] = None) -> list:
         """
-        Fetch all client invoices for the organization.
-        Hubstaff client invoices are not filterable by project_id via the API —
-        they are matched by client name after fetching.
+        Fetch open/draft client invoices for the organization, matched by client_id.
+        Only returns invoices with status 'draft' or 'open'.
+        Fetches full invoice details for each match to include line items.
         """
-        # Try client_invoices endpoint first (Hubstaff v2 uses this for client-facing invoices)
-        for endpoint in ["client_invoices", "invoices"]:
-            url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/{endpoint}"
-            params: dict = {"page_size": 100}
-            all_invoices = []
-            first = True
-            found = False
-            while url:
-                try:
-                    response = await self._make_request("GET", url, params=params if first else {})
-                    found = True
-                except Exception as e:
-                    if "404" in str(e) or "405" in str(e):
-                        print(f"[DEBUG invoices] {endpoint} returned error — trying next")
-                        break
-                    raise
-                first = False
-                data = response.json()
-                # Hubstaff returns 'client_invoices' or 'invoices' depending on endpoint
-                invoices = data.get("client_invoices") or data.get("invoices", [])
-                print(f"[DEBUG invoices] {endpoint}: fetched {len(invoices)} invoices, keys={list(data.keys())}")
-                all_invoices.extend(invoices)
-                next_link = data.get("pagination", {}).get("next_link")
-                if next_link:
-                    url = next_link
-                else:
-                    break
-            if found and all_invoices:
-                break
-
-        # Filter by client name if provided — invoices only have client_id, so look up by name
+        # Resolve client_id first
+        hubstaff_client_id = None
         if client_name:
-            # Fetch Hubstaff clients to find the matching client_id
             hubstaff_client_id = await self._get_hubstaff_client_id(organization_id, client_name)
             print(f"[DEBUG invoices] resolved client_id={hubstaff_client_id} for '{client_name}'")
-            if hubstaff_client_id:
-                filtered = [inv for inv in all_invoices if str(inv.get("client_id", "")) == str(hubstaff_client_id)]
-            else:
-                filtered = []
-            print(f"[DEBUG invoices] filtered to {len(filtered)} invoices for client '{client_name}'")
-            return filtered
+            if not hubstaff_client_id:
+                return []
 
-        return all_invoices
+        # Fetch all invoices sorted newest first
+        url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/client_invoices"
+        params: dict = {"page_size": 100, "sort_by": "created_at", "sort_direction": "desc"}
+        all_invoices = []
+        while url:
+            try:
+                response = await self._make_request("GET", url, params=params)
+            except Exception as e:
+                if "404" in str(e):
+                    return []
+                raise
+            params = {}
+            data = response.json()
+            all_invoices.extend(data.get("client_invoices") or data.get("invoices", []))
+            url = data.get("pagination", {}).get("next_link")
+
+        print(f"[DEBUG invoices] fetched {len(all_invoices)} total invoices")
+
+        # Filter to matching client and open/draft status only
+        matched = []
+        for inv in all_invoices:
+            if hubstaff_client_id and str(inv.get("client_id", "")) != str(hubstaff_client_id):
+                continue
+            status = (inv.get("status") or "").lower()
+            if status not in ("draft", "open", ""):
+                continue
+            matched.append(inv)
+
+        print(f"[DEBUG invoices] {len(matched)} open/draft invoices matched for '{client_name}'")
+
+        # Fetch full invoice details to get line items
+        full_invoices = []
+        for inv in matched:
+            try:
+                full = await self.get_invoice(str(inv.get("id", "")))
+                print(f"[DEBUG invoice] id={full.get('id')} status={full.get('status')} number={full.get('number')} line_items={full.get('line_items', [])}")
+                full_invoices.append(full)
+            except Exception as e:
+                print(f"[DEBUG invoice] failed to fetch full invoice {inv.get('id')}: {e}")
+                full_invoices.append(inv)
+
+        return full_invoices
 
     async def _get_hubstaff_client_id(self, organization_id: str, client_name: str) -> Optional[str]:
         """Find a Hubstaff client_id by matching client name."""
