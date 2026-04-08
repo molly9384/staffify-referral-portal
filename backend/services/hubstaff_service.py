@@ -108,7 +108,7 @@ class HubstaffService:
 
     async def _make_request(self, method: str, url: str, **kwargs) -> httpx.Response:
         """Make a Hubstaff API request, auto-refreshing the token on 401."""
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
             response = await client.request(method, url, headers=self.headers, **kwargs)
             if response.status_code == 401:
                 # Token expired — refresh and retry once
