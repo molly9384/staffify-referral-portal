@@ -126,9 +126,14 @@ export default function ReferralDetail() {
     setMembersLoading(true)
     try {
       const projectId = ref?.referred_client?.hubstaff_project_id
-      const members = projectId
-        ? await getHubstaffProjectMembers(projectId)
-        : await getHubstaffOrgMembers()
+      let members = []
+      if (projectId) {
+        members = await getHubstaffProjectMembers(projectId)
+      }
+      // If no project linked or project returned no members, fall back to org members
+      if (!members || members.length === 0) {
+        members = await getHubstaffOrgMembers()
+      }
       setProjectMembers(members.sort((a, b) => a.name.localeCompare(b.name)))
     } catch {
       // Fall back to manual entry
