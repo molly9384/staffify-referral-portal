@@ -244,30 +244,37 @@ class HubstaffService:
             if found and all_invoices:
                 break
 
-        # Log first invoice structure to understand the schema
-        if all_invoices:
-            print(f"[DEBUG invoices] first invoice keys: {list(all_invoices[0].keys())}")
-            print(f"[DEBUG invoices] first invoice sample: {all_invoices[0]}")
-
-        # Filter by client name if provided
+        # Filter by client name if provided — invoices only have client_id, so look up by name
         if client_name:
-            name_lower = client_name.strip().lower()
-            filtered = []
-            for inv in all_invoices:
-                # Try all possible name fields
-                inv_client_name = (
-                    inv.get("client_name") or
-                    inv.get("name") or
-                    (inv.get("client") or {}).get("name") or
-                    (inv.get("client") or {}).get("display_name") or
-                    ""
-                )
-                if inv_client_name.strip().lower() == name_lower:
-                    filtered.append(inv)
+            # Fetch Hubstaff clients to find the matching client_id
+            hubstaff_client_id = await self._get_hubstaff_client_id(organization_id, client_name)
+            print(f"[DEBUG invoices] resolved client_id={hubstaff_client_id} for '{client_name}'")
+            if hubstaff_client_id:
+                filtered = [inv for inv in all_invoices if str(inv.get("client_id", "")) == str(hubstaff_client_id)]
+            else:
+                filtered = []
             print(f"[DEBUG invoices] filtered to {len(filtered)} invoices for client '{client_name}'")
             return filtered
 
         return all_invoices
+
+    async def _get_hubstaff_client_id(self, organization_id: str, client_name: str) -> Optional[str]:
+        """Find a Hubstaff client_id by matching client name."""
+        url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/clients"
+        try:
+            response = await self._make_request("GET", url)
+            data = response.json()
+            clients = data.get("clients", [])
+            name_lower = client_name.strip().lower()
+            print(f"[DEBUG clients] found {len(clients)} Hubstaff clients")
+            for c in clients:
+                c_name = (c.get("name") or c.get("display_name") or "").strip().lower()
+                if c_name == name_lower or c_name.startswith(name_lower.split()[0]):
+                    print(f"[DEBUG clients] matched '{c.get('name')}' id={c.get('id')}")
+                    return str(c.get("id", ""))
+        except Exception as e:
+            print(f"[DEBUG clients] error fetching clients: {e}")
+        return None
 
     async def get_invoice(self, invoice_id: str) -> dict:
         """Fetch a single invoice with full line item details."""
