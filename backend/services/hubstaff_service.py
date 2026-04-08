@@ -126,8 +126,16 @@ class HubstaffService:
 
     async def get_project_members(self, project_id: str) -> list:
         url = f"{HUBSTAFF_API_BASE}/projects/{project_id}/members"
-        response = await self._make_request("GET", url)
-        return response.json().get("members", [])
+        response = await self._make_request("GET", url, params={"include[]": "users"})
+        data = response.json()
+        members = data.get("members", [])
+        users_by_id = {str(u["id"]): u for u in data.get("users", []) if u.get("id")}
+        for m in members:
+            uid = str(m.get("user_id", ""))
+            if uid and uid in users_by_id and not m.get("user"):
+                m["user"] = users_by_id[uid]
+        print(f"[DEBUG project-members] project {project_id} members sample: {members[:2]}")
+        return members
 
     async def get_activities(
         self,
@@ -166,10 +174,21 @@ class HubstaffService:
         """Fetch all members (users) for the organization."""
         url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/members"
         all_members = []
+        first = True
         while url:
-            response = await self._make_request("GET", url)
+            params = {"include[]": "users"} if first else {}
+            response = await self._make_request("GET", url, params=params)
+            first = False
             data = response.json()
-            all_members.extend(data.get("members", []))
+            members = data.get("members", [])
+            # Merge embedded users by user_id so name is available on each member
+            users_by_id = {str(u["id"]): u for u in data.get("users", []) if u.get("id")}
+            for m in members:
+                uid = str(m.get("user_id", ""))
+                if uid and uid in users_by_id and not m.get("user"):
+                    m["user"] = users_by_id[uid]
+            all_members.extend(members)
+            print(f"[DEBUG org-members] page members sample: {members[:2]}")
             url = data.get("pagination", {}).get("next_link")
         return all_members
 
