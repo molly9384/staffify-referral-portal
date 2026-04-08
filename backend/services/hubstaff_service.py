@@ -212,7 +212,7 @@ class HubstaffService:
         """
         Fetch open/draft client invoices for the organization, matched by client_id.
         Only returns invoices with status 'draft' or 'open'.
-        Fetches full invoice details for each match to include line items.
+        Line items are included via include_line_items=true (no separate detail endpoint exists).
         """
         # Resolve client_id first
         hubstaff_client_id = None
@@ -222,9 +222,13 @@ class HubstaffService:
             if not hubstaff_client_id:
                 return []
 
-        # Fetch invoices filtered by client_id directly
+        # Fetch invoices filtered by client_id, with line items included
         url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/client_invoices"
-        params: dict = {"page_size": 100, "client_ids[]": hubstaff_client_id}
+        params: dict = {
+            "page_size": 100,
+            "client_ids[]": hubstaff_client_id,
+            "include_line_items": "true",
+        }
         all_invoices = []
         while url:
             try:
@@ -244,11 +248,9 @@ class HubstaffService:
         unique_statuses = list({inv.get("status", "") for inv in all_invoices})
         print(f"[DEBUG invoices] unique statuses: {unique_statuses}")
 
-        # Filter to matching client and non-closed status
+        # Filter to non-closed status
         matched = []
         for inv in all_invoices:
-            if hubstaff_client_id and str(inv.get("client_id", "")) != str(hubstaff_client_id):
-                continue
             status = (inv.get("status") or "").lower()
             # Exclude only definitively closed/paid invoices
             if status in ("closed", "paid", "cancelled", "canceled", "void", "voided"):
@@ -256,19 +258,10 @@ class HubstaffService:
             matched.append(inv)
 
         print(f"[DEBUG invoices] {len(matched)} open/draft invoices matched for '{client_name}'")
-
-        # Fetch full invoice details to get line items
-        full_invoices = []
         for inv in matched:
-            full = await self.get_invoice(str(inv.get("id", "")), organization_id=organization_id)
-            if full:
-                print(f"[DEBUG invoice] id={full.get('id')} status={full.get('status')} number={full.get('number')} line_items={full.get('line_items', [])}")
-                full_invoices.append(full)
-            else:
-                print(f"[DEBUG invoice] all endpoints failed for invoice {inv.get('id')}, using list data: {inv}")
-                full_invoices.append(inv)
+            print(f"[DEBUG invoice] id={inv.get('id')} status={inv.get('status')} number={inv.get('number')} line_items={inv.get('line_items', [])}")
 
-        return full_invoices
+        return matched
 
     async def _get_hubstaff_client_id(self, organization_id: str, client_name: str) -> Optional[str]:
         """Find a Hubstaff client_id by matching client name."""
@@ -289,23 +282,27 @@ class HubstaffService:
         return None
 
     async def get_invoice(self, invoice_id: str, organization_id: Optional[str] = None) -> dict:
-        """Fetch a single client invoice with full line item details."""
-        # Try org-scoped endpoint first, then global
-        urls = []
-        if organization_id:
-            urls.append(f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/client_invoices/{invoice_id}")
-        urls.append(f"{HUBSTAFF_API_BASE}/client_invoices/{invoice_id}")
-        urls.append(f"{HUBSTAFF_API_BASE}/invoices/{invoice_id}")
-
-        for url in urls:
+        """
+        Fetch a single client invoice with full line item details.
+        Hubstaff has no GET-by-ID endpoint for client invoices; we fetch the list
+        with include_line_items=true and match by id.
+        organization_id is required.
+        """
+        if not organization_id:
+            return {}
+        url = f"{HUBSTAFF_API_BASE}/organizations/{organization_id}/client_invoices"
+        params = {"include_line_items": "true", "page_size": 100}
+        while url:
             try:
-                response = await self._make_request("GET", url)
-                data = response.json()
-                print(f"[DEBUG get_invoice] SUCCESS url={url} keys={list(data.keys())} sample={str(data)[:400]}")
-                return data.get("client_invoice") or data.get("invoice") or data
-            except Exception as e:
-                print(f"[DEBUG get_invoice] FAIL url={url} error={e}")
-                continue
+                response = await self._make_request("GET", url, params=params)
+            except Exception:
+                return {}
+            params = {}
+            data = response.json()
+            for inv in data.get("client_invoices", []):
+                if str(inv.get("id", "")) == str(invoice_id):
+                    return inv
+            url = data.get("pagination", {}).get("next_link")
         return {}
 
     async def register_webhook(self, organization_id: str, target_url: str) -> dict:

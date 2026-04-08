@@ -269,7 +269,7 @@ class CreditService:
             return None
 
         # Re-fetch the invoice
-        invoice = await hubstaff.get_invoice(credit.hubstaff_invoice_id)
+        invoice = await hubstaff.get_invoice(credit.hubstaff_invoice_id, organization_id=settings.HUBSTAFF_ORG_ID)
         va_name = credit.va.hubstaff_user_name
         hours_worked, credit_amount = self.calculate_credits_from_invoice(invoice, va_name)
 
