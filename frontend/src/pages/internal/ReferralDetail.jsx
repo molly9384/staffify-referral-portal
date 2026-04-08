@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
-  getReferral, getReferralCredits, updateReferralStatus,
+  getReferral, getReferralCredits, updateReferralStatus, updateReferral,
   addVA, terminateVA, setEligibleVA, getHubstaffProjectMembers, getHubstaffOrgMembers
 } from '../../api/client'
 import PipelineStage from '../../components/PipelineStage'
@@ -16,10 +16,14 @@ export default function ReferralDetail() {
   const [error, setError] = useState('')
 
   // Modals
+  const [showEditModal, setShowEditModal] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showAddVAModal, setShowAddVAModal] = useState(false)
   const [showTerminateModal, setShowTerminateModal] = useState(false)
   const [selectedVA, setSelectedVA] = useState(null)
+
+  const [editForm, setEditForm] = useState({ referred_name: '', referred_email: '', referral_date: '' })
+  const [editError, setEditError] = useState('')
 
   const [statusForm, setStatusForm] = useState({ status: '', notes: '', activation_date: '' })
   const [vaForm, setVAForm] = useState({ hubstaff_user_name: '', hubstaff_user_id: '', start_date: new Date().toISOString().split('T')[0] })
@@ -44,6 +48,35 @@ export default function ReferralDetail() {
   useEffect(() => { load() }, [id])
 
   const [statusError, setStatusError] = useState('')
+
+  const openEditModal = () => {
+    setEditForm({
+      referred_name: referral.referred_name || '',
+      referred_email: referral.referred_email || '',
+      referral_date: referral.referral_date || '',
+    })
+    setEditError('')
+    setShowEditModal(true)
+  }
+
+  const handleEditSave = async (e) => {
+    e.preventDefault()
+    setSubmitting(true)
+    setEditError('')
+    try {
+      await updateReferral(id, {
+        referred_name: editForm.referred_name || undefined,
+        referred_email: editForm.referred_email || null,
+        referral_date: editForm.referral_date || undefined,
+      })
+      await load()
+      setShowEditModal(false)
+    } catch (err) {
+      setEditError(err?.response?.data?.detail || 'Failed to save changes.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const handleStatusUpdate = async (e) => {
     e.preventDefault()
@@ -177,9 +210,14 @@ export default function ReferralDetail() {
           </div>
           {referral.referred_email && <p className="text-gray-500 text-sm mt-0.5">{referral.referred_email}</p>}
         </div>
-        <button onClick={() => setShowStatusModal(true)} className="btn-primary">
-          Update Status
-        </button>
+        <div className="flex gap-2">
+          <button onClick={openEditModal} className="btn-secondary">
+            Edit Details
+          </button>
+          <button onClick={() => setShowStatusModal(true)} className="btn-primary">
+            Update Status
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -349,6 +387,61 @@ export default function ReferralDetail() {
         <div className="card card-body">
           <h2 className="text-sm font-semibold text-gray-700 mb-2">Pipeline Notes</h2>
           <p className="text-sm text-gray-600 whitespace-pre-wrap">{referral.pipeline_notes}</p>
+        </div>
+      )}
+
+      {/* Edit Referral Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">Edit Referral Details</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleEditSave} className="p-6 space-y-4">
+              <div>
+                <label className="label">Referred Name</label>
+                <input
+                  type="text"
+                  className="input"
+                  required
+                  value={editForm.referred_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referred_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Referred Email <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="email"
+                  className="input"
+                  placeholder="email@example.com"
+                  value={editForm.referred_email}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referred_email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Referral Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  required
+                  value={editForm.referral_date}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referral_date: e.target.value }))}
+                />
+              </div>
+              {editError && (
+                <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{editError}</div>
+              )}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowEditModal(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
+                <button type="submit" disabled={submitting} className="btn-primary flex-1 justify-center">{submitting ? 'Saving…' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -163,6 +163,7 @@ class ReferralUpdate(BaseModel):
     referred_client_id: Optional[uuid.UUID] = None
     referred_name: Optional[str] = None
     referred_email: Optional[EmailStr] = None
+    referral_date: Optional[date] = None
     status: Optional[ReferralStatus] = None
     pipeline_notes: Optional[str] = None
     activation_date: Optional[date] = None
