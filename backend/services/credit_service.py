@@ -178,6 +178,9 @@ class CreditService:
                     organization_id=settings.HUBSTAFF_ORG_ID,
                     project_id=referred_client.hubstaff_project_id,
                 )
+                print(f"[DEBUG credits] Found {len(invoices)} invoices for project {referred_client.hubstaff_project_id}")
+                for inv in invoices:
+                    print(f"[DEBUG invoice] id={inv.get('id')} status={inv.get('status')} number={inv.get('number')} line_items={inv.get('line_items', [])}")
 
                 for invoice in invoices:
                     invoice_id = str(invoice.get("id", ""))
