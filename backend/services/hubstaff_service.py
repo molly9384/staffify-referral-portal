@@ -232,8 +232,9 @@ class HubstaffService:
                     raise
                 first = False
                 data = response.json()
-                print(f"[DEBUG invoices] {endpoint}: fetched {len(data.get('invoices', []))} invoices, keys={list(data.keys())}")
-                invoices = data.get("invoices", [])
+                # Hubstaff returns 'client_invoices' or 'invoices' depending on endpoint
+                invoices = data.get("client_invoices") or data.get("invoices", [])
+                print(f"[DEBUG invoices] {endpoint}: fetched {len(invoices)} invoices, keys={list(data.keys())}")
                 all_invoices.extend(invoices)
                 next_link = data.get("pagination", {}).get("next_link")
                 if next_link:
