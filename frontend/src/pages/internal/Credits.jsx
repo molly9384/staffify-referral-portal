@@ -314,12 +314,12 @@ export default function Credits() {
                         )}
                       </td>
                       <td className="px-6 py-3.5">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           {credit.status === 'pending' && (
                             <>
                               <button
                                 onClick={() => setEditingCredit(credit)}
-                                className="text-xs text-primary-600 hover:text-primary-800 font-medium"
+                                className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
                                 title="Edit credit amount"
                               >
                                 Edit
@@ -328,9 +328,15 @@ export default function Credits() {
                                 <button
                                   onClick={() => handleRecalculate(credit.id)}
                                   disabled={isRecalculating}
-                                  className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+                                  className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50"
                                   title="Recalculate from Hubstaff invoice"
                                 >
+                                  {isRecalculating ? (
+                                    <svg className="w-3 h-3 animate-spin mr-1" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                  ) : null}
                                   {isRecalculating ? 'Recalc…' : 'Recalc'}
                                 </button>
                               )}
@@ -338,16 +344,16 @@ export default function Credits() {
                           )}
                           {deletingCredit === credit.id ? (
                             <span className="flex items-center gap-1">
-                              <span className="text-xs text-gray-500">Delete?</span>
+                              <span className="text-xs text-gray-500 mr-0.5">Delete?</span>
                               <button
                                 onClick={() => handleDelete(credit.id)}
-                                className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
                               >
                                 Yes
                               </button>
                               <button
                                 onClick={() => setDeletingCredit(null)}
-                                className="text-xs text-gray-400 hover:text-gray-600 font-medium"
+                                className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
                               >
                                 No
                               </button>
@@ -355,7 +361,7 @@ export default function Credits() {
                           ) : (
                             <button
                               onClick={() => setDeletingCredit(credit.id)}
-                              className="text-xs text-red-400 hover:text-red-600 font-medium"
+                              className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
                               title="Delete credit entry"
                             >
                               Delete

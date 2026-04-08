@@ -272,8 +272,15 @@ class CreditService:
         if not credit or not credit.hubstaff_invoice_id:
             return None
 
-        # Re-fetch the invoice
-        invoice = await hubstaff.get_invoice(credit.hubstaff_invoice_id, organization_id=settings.HUBSTAFF_ORG_ID)
+        # Re-fetch the invoice using the same client-filtered path as the main automation
+        client_name = credit.referral.referred_client.name if credit.referral and credit.referral.referred_client else None
+        invoice = {}
+        if client_name:
+            invoices = await hubstaff.get_invoices(
+                organization_id=settings.HUBSTAFF_ORG_ID,
+                client_name=client_name,
+            )
+            invoice = next((inv for inv in invoices if str(inv.get("id", "")) == str(credit.hubstaff_invoice_id)), {})
         va_name = credit.va.hubstaff_user_name
         hours_worked, credit_amount = self.calculate_credits_from_invoice(invoice, va_name)
 
