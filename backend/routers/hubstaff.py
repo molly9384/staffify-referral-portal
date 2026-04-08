@@ -190,7 +190,8 @@ async def get_org_members(
         result = []
         for m in members:
             role = m.get("role", "")
-            if role not in ("user", "member"):
+            # Exclude owners/admins — include all staff/VA members
+            if role in ("owner", "admin"):
                 continue
             user = m.get("user") or m
             name = user.get("name") or m.get("name", "")
