@@ -84,8 +84,19 @@ async def delete_client(
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
+
+    # Block delete if client has referrals (referring_client_id is NOT NULL)
+    referral_check = await db.execute(
+        select(Referral.id).where(Referral.referring_client_id == client_id).limit(1)
+    )
+    if referral_check.scalar_one_or_none():
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete a client who has submitted referrals. Archive them instead, or delete their referrals first."
+        )
+
     await db.delete(client)
-    await db.flush()
+    await db.commit()
 
 
 @router.get("/{client_id}/referrals", response_model=List[ReferralOut])
