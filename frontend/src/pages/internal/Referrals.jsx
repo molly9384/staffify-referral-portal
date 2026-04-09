@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { getReferrals, getClients, createReferral, archiveReferral, restoreReferral, deleteReferral } from '../../api/client'
 import { statusBadge, formatDate, formatCurrency } from '../../utils/format'
 import { getSeenReferralIds, markReferralsAsSeen } from '../../utils/storage'
+import { useAuth } from '../../context/AuthContext'
 
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
@@ -17,6 +18,7 @@ const STATUS_TABS = [
 ]
 
 export default function Referrals() {
+  const { isOwner } = useAuth()
   // Snapshot which IDs were unseen when this page loaded, before InternalLayout marks them all seen
   const [unseenOnArrival] = useState(() => {
     const seen = getSeenReferralIds()
@@ -240,13 +242,15 @@ export default function Referrals() {
                               <Link to={`/internal/referrals/${ref.id}`} className="text-primary-600 hover:text-primary-700 font-medium">
                                 View
                               </Link>
-                              <button
-                                onClick={() => handleArchive(ref.id)}
-                                disabled={busy}
-                                className="text-sm text-gray-400 hover:text-gray-600 font-medium disabled:opacity-50"
-                              >
-                                {busy ? '…' : 'Archive'}
-                              </button>
+                              {isOwner && (
+                                <button
+                                  onClick={() => handleArchive(ref.id)}
+                                  disabled={busy}
+                                  className="text-sm text-gray-400 hover:text-gray-600 font-medium disabled:opacity-50"
+                                >
+                                  {busy ? '…' : 'Archive'}
+                                </button>
+                              )}
                             </>
                           )}
                         </div>

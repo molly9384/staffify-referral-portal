@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getCredits, getCreditSummary, runCreditAutomation, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible } from '../../api/client'
 import CreditSummaryComponent from '../../components/CreditSummary'
 import { formatDate, formatCurrency } from '../../utils/format'
+import { useAuth } from '../../context/AuthContext'
 
 const STATUS_TABS = [
   { key: 'all', label: 'All Credits' },
@@ -82,6 +83,7 @@ function EditCreditModal({ credit, onClose, onSaved }) {
 }
 
 export default function Credits() {
+  const { isOwner } = useAuth()
   const [credits, setCredits] = useState([])
   const [summary, setSummary] = useState(null)
   const [activeTab, setActiveTab] = useState('all')
@@ -209,34 +211,36 @@ export default function Credits() {
           <h1 className="text-2xl font-bold text-gray-900">Credits</h1>
           <p className="text-gray-500 text-sm mt-1">Manage referral credit accrual and QBO application.</p>
         </div>
-        <div className="flex gap-3">
-          <button onClick={handleRunAutomation} disabled={automationRunning} className="btn-secondary">
-            {automationRunning ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            )}
-            {automationRunning ? 'Running…' : 'Pull Invoices'}
-          </button>
-          <button onClick={handleApplyCredits} disabled={applyRunning} className="btn-primary">
-            {applyRunning ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            )}
-            {applyRunning ? 'Applying…' : 'Apply Credits to QBO'}
-          </button>
-        </div>
+        {isOwner && (
+          <div className="flex gap-3">
+            <button onClick={handleRunAutomation} disabled={automationRunning} className="btn-secondary">
+              {automationRunning ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              )}
+              {automationRunning ? 'Running…' : 'Pull Invoices'}
+            </button>
+            <button onClick={handleApplyCredits} disabled={applyRunning} className="btn-primary">
+              {applyRunning ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              {applyRunning ? 'Applying…' : 'Apply Credits to QBO'}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -361,30 +365,32 @@ export default function Credits() {
                               </button>
                             </>
                           )}
-                          {deletingCredit === credit.id ? (
-                            <span className="flex items-center gap-1">
-                              <span className="text-xs text-gray-500 mr-0.5">Delete?</span>
+                          {isOwner && (
+                            deletingCredit === credit.id ? (
+                              <span className="flex items-center gap-1">
+                                <span className="text-xs text-gray-500 mr-0.5">Delete?</span>
+                                <button
+                                  onClick={() => handleDelete(credit.id)}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+                                >
+                                  Yes
+                                </button>
+                                <button
+                                  onClick={() => setDeletingCredit(null)}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                                >
+                                  No
+                                </button>
+                              </span>
+                            ) : (
                               <button
-                                onClick={() => handleDelete(credit.id)}
-                                className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+                                onClick={() => setDeletingCredit(credit.id)}
+                                className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                                title="Delete credit entry"
                               >
-                                Yes
+                                Delete
                               </button>
-                              <button
-                                onClick={() => setDeletingCredit(null)}
-                                className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                              >
-                                No
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => setDeletingCredit(credit.id)}
-                              className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                              title="Delete credit entry"
-                            >
-                              Delete
-                            </button>
+                            )
                           )}
                         </div>
                       </td>

@@ -55,6 +55,7 @@ class PortalUserOut(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str
+    role: str
     is_active: bool
     created_at: datetime
     client_name: Optional[str] = None

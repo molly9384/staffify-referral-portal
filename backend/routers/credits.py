@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 
-from auth import get_current_active_user, require_admin, require_admin_only
+from auth import get_current_active_user, require_admin, require_admin_only, require_owner
 from database import get_db
 from models import CreditLedger, Referral, User, UserRole, CreditStatus
 from schemas import CreditLedgerOut, CreditSummary, MessageResponse
@@ -122,7 +122,7 @@ async def get_credit_summary(
 @router.post("/run-automation", response_model=MessageResponse)
 async def run_credit_automation(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_only),
+    current_user: User = Depends(require_owner),
 ):
     try:
         from services.credit_service import CreditService
@@ -241,7 +241,7 @@ async def recalculate_credit(
 async def delete_credit(
     credit_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_only),
+    current_user: User = Depends(require_owner),
 ):
     """Hard-delete a credit entry and adjust the referral total."""
     result = await db.execute(select(CreditLedger).where(CreditLedger.id == credit_id))
@@ -270,7 +270,7 @@ async def delete_credit(
 @router.post("/apply", response_model=MessageResponse)
 async def apply_pending_credits(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_only),
+    current_user: User = Depends(require_owner),
 ):
     try:
         from services.credit_service import CreditService

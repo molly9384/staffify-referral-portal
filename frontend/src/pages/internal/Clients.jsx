@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { getClients, createClient, updateClient, deleteClient, getHubstaffProjects, lookupQBOCustomer } from '../../api/client'
 import { formatDate } from '../../utils/format'
+import { useAuth } from '../../context/AuthContext'
 
 export default function Clients() {
+  const { isOwner } = useAuth()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -231,9 +233,11 @@ export default function Clients() {
                       <button onClick={() => openEdit(client)} className="text-primary-600 hover:text-primary-700 font-medium text-sm">
                         Edit
                       </button>
-                      <button onClick={() => setDeletingClient(client)} className="text-red-500 hover:text-red-700 font-medium text-sm">
-                        Delete
-                      </button>
+                      {isOwner && (
+                        <button onClick={() => setDeletingClient(client)} className="text-red-500 hover:text-red-700 font-medium text-sm">
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

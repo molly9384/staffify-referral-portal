@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from auth import get_current_active_user, require_admin
+from auth import get_current_active_user, require_admin, require_owner
 from config import settings
 from database import get_db
 from models import Referral, CreditLedger, User, UserRole, ReferralStatus
@@ -382,7 +382,7 @@ async def update_referral_status(
 async def archive_referral(
     referral_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_owner),
 ):
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
     referral = result.scalar_one_or_none()
@@ -412,7 +412,7 @@ async def restore_referral(
 async def delete_referral(
     referral_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_owner),
 ):
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
     referral = result.scalar_one_or_none()

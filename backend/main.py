@@ -61,6 +61,7 @@ async def lifespan(app: FastAPI):
     from sqlalchemy import text
     async with engine.connect() as conn:
         await conn.execute(text("ALTER TYPE creditstatus ADD VALUE IF NOT EXISTS 'eligible'"))
+        await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'owner'"))
         await conn.commit()
 
     # Add new referral columns if they don't exist

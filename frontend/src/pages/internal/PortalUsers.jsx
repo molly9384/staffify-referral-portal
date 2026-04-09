@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { getPortalUsers, deletePortalUser } from '../../api/client'
 import apiClient from '../../api/client'
 import { formatDate } from '../../utils/format'
+import { useAuth } from '../../context/AuthContext'
 
 export default function PortalUsers() {
+  const { isOwner } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -28,7 +30,7 @@ export default function PortalUsers() {
   const filtered = users.filter((u) => {
     const matchesTab = tab === 'active' ? u.is_active : !u.is_active
     const q = search.toLowerCase()
-    const matchesSearch = !q || u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.client_name || '').toLowerCase().includes(q)
+    const matchesSearch = !q || u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.client_name || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q)
     return matchesTab && matchesSearch
   })
 
@@ -75,8 +77,8 @@ export default function PortalUsers() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Client Portal Users</h1>
-        <p className="text-gray-500 text-sm mt-1">Manage client portal accounts. Archive preserves all referral and credit data.</p>
+        <h1 className="text-2xl font-bold text-gray-900">Portal Users</h1>
+        <p className="text-gray-500 text-sm mt-1">Manage all portal accounts. Archive preserves all referral and credit data.</p>
       </div>
 
       {error && (
@@ -139,26 +141,39 @@ export default function PortalUsers() {
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Name</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Email</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Client</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Role</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Joined</th>
                   <th className="px-6 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((u) => (
+                {filtered.map((u) => {
+                  const roleBadge = {
+                    owner: 'bg-purple-100 text-purple-700',
+                    admin: 'bg-blue-100 text-blue-700',
+                    staff: 'bg-gray-100 text-gray-600',
+                    client: 'bg-green-100 text-green-700',
+                  }[u.role] || 'bg-gray-100 text-gray-500'
+                  return (
                   <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-3.5 font-medium text-gray-900">{u.full_name}</td>
                     <td className="px-6 py-3.5 text-gray-600">{u.email}</td>
                     <td className="px-6 py-3.5 text-gray-500">{u.client_name || '—'}</td>
+                    <td className="px-6 py-3.5">
+                      <span className={`badge capitalize ${roleBadge}`}>{u.role}</span>
+                    </td>
                     <td className="px-6 py-3.5 text-gray-400 text-xs">{formatDate(u.created_at)}</td>
                     <td className="px-6 py-3.5 text-right flex items-center justify-end gap-4">
                       {tab === 'active' ? (
-                        <button
-                          onClick={() => handleArchive(u.id)}
-                          disabled={actionUserId === u.id}
-                          className="text-amber-600 hover:text-amber-700 font-medium text-sm disabled:opacity-40"
-                        >
-                          {actionUserId === u.id ? 'Archiving…' : 'Archive'}
-                        </button>
+                        isOwner && (
+                          <button
+                            onClick={() => handleArchive(u.id)}
+                            disabled={actionUserId === u.id}
+                            className="text-amber-600 hover:text-amber-700 font-medium text-sm disabled:opacity-40"
+                          >
+                            {actionUserId === u.id ? 'Archiving…' : 'Archive'}
+                          </button>
+                        )
                       ) : (
                         <>
                           <button
@@ -168,18 +183,21 @@ export default function PortalUsers() {
                           >
                             {actionUserId === u.id ? 'Restoring…' : 'Restore'}
                           </button>
-                          <button
-                            onClick={() => handleDelete(u.id)}
-                            disabled={actionUserId === u.id}
-                            className="text-red-500 hover:text-red-700 font-medium text-sm disabled:opacity-40"
-                          >
-                            Delete
-                          </button>
+                          {isOwner && (
+                            <button
+                              onClick={() => handleDelete(u.id)}
+                              disabled={actionUserId === u.id}
+                              className="text-red-500 hover:text-red-700 font-medium text-sm disabled:opacity-40"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </>
                       )}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

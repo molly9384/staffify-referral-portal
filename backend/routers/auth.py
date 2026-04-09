@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from auth import (
     verify_password, get_password_hash, create_access_token,
-    get_current_active_user, require_admin_only
+    get_current_active_user, require_admin_only, require_owner
 )
 from config import settings
 from database import get_db
@@ -52,6 +52,10 @@ async def register(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin_only),
 ):
+    # Only owners can create admin or owner users
+    if user_in.role in (UserRole.admin, UserRole.owner) and current_user.role != UserRole.owner:
+        raise HTTPException(status_code=403, detail="Only owners can create admin users")
+
     result = await db.execute(select(User).where(User.email == user_in.email))
     existing = result.scalar_one_or_none()
     if existing:
@@ -263,12 +267,11 @@ async def list_portal_users(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin_only),
 ):
-    """List all client portal user accounts."""
+    """List all portal user accounts (client, admin, owner, staff)."""
     from models import Client
     from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(User)
-        .where(User.role == UserRole.client)
         .options(selectinload(User.client))
         .order_by(User.is_active.desc(), User.created_at.desc())
     )
@@ -278,6 +281,7 @@ async def list_portal_users(
             id=u.id,
             email=u.email,
             full_name=u.full_name,
+            role=u.role.value,
             is_active=u.is_active,
             created_at=u.created_at,
             client_name=u.client.name if u.client else None,
@@ -290,13 +294,15 @@ async def list_portal_users(
 async def delete_portal_user(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_only),
+    current_user: User = Depends(require_owner),
 ):
-    """Remove a client portal user account."""
-    result = await db.execute(select(User).where(User.id == user_id, User.role == UserRole.client))
+    """Remove a portal user account (owner only)."""
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
     await db.delete(user)
     await db.commit()
 
@@ -305,16 +311,19 @@ async def delete_portal_user(
 async def archive_portal_user(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_only),
+    current_user: User = Depends(require_owner),
 ):
-    """Archive a client portal user (soft delete — data preserved, login disabled)."""
-    result = await db.execute(select(User).where(User.id == user_id, User.role == UserRole.client))
+    """Archive a portal user (owner only — soft delete, data preserved, login disabled)."""
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot archive your own account")
     user.is_active = False
     await db.commit()
     return {"message": "User archived"}
+
 
 @router.patch("/portal-users/{user_id}/restore", status_code=status.HTTP_200_OK)
 async def restore_portal_user(
@@ -323,7 +332,7 @@ async def restore_portal_user(
     current_user: User = Depends(require_admin_only),
 ):
     """Restore an archived portal user."""
-    result = await db.execute(select(User).where(User.id == user_id, User.role == UserRole.client))
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

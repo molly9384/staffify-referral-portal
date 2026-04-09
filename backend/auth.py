@@ -69,7 +69,8 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 
 def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
-    if current_user.role not in (UserRole.admin, UserRole.staff):
+    """Allow owner, admin, or staff access."""
+    if current_user.role not in (UserRole.owner, UserRole.admin, UserRole.staff):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions",
@@ -78,9 +79,20 @@ def require_admin(current_user: User = Depends(get_current_active_user)) -> User
 
 
 def require_admin_only(current_user: User = Depends(get_current_active_user)) -> User:
-    if current_user.role != UserRole.admin:
+    """Allow owner or admin access (not staff)."""
+    if current_user.role not in (UserRole.owner, UserRole.admin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
+        )
+    return current_user
+
+
+def require_owner(current_user: User = Depends(get_current_active_user)) -> User:
+    """Allow owner access only."""
+    if current_user.role != UserRole.owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner access required",
         )
     return current_user

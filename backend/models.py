@@ -15,6 +15,7 @@ import enum
 
 
 class UserRole(str, enum.Enum):
+    owner = "owner"
     admin = "admin"
     staff = "staff"
     client = "client"

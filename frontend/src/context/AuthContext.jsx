@@ -80,10 +80,11 @@ export function AuthProvider({ children }) {
     loginWithToken,
     logout,
     refreshUser,
-    isAdmin: user?.role === 'admin',
+    isOwner: user?.role === 'owner',
+    isAdmin: user?.role === 'admin' || user?.role === 'owner',
     isStaff: user?.role === 'staff',
     isClient: user?.role === 'client',
-    isInternal: user?.role === 'admin' || user?.role === 'staff',
+    isInternal: user?.role === 'admin' || user?.role === 'staff' || user?.role === 'owner',
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

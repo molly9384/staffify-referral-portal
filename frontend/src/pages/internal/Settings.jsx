@@ -168,7 +168,7 @@ export default function Settings() {
       </div>
 
       {/* Integrations Card */}
-      {user?.role === 'admin' && (
+      {(user?.role === 'admin' || user?.role === 'owner') && (
         <div className="card mb-6">
           <div className="card-header">
             <h2 className="text-base font-semibold text-gray-900">Integrations</h2>
