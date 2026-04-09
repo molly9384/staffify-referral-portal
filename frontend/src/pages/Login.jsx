@@ -43,7 +43,7 @@ export default function Login() {
 
     if (googleError) {
       if (googleError === 'google_no_account') {
-        setError(`No Staffify account found for ${googleEmail || 'that Google address'}. Please create an account or sign in with your email.`)
+        setError(`We don't have ${googleEmail || 'that Google address'} on file with Staffify. Please contact us to get set up.`)
       } else {
         setError(GOOGLE_ERROR_MESSAGES[googleError] || 'Google sign-in failed.')
       }

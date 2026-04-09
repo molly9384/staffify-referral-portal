@@ -392,10 +392,49 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
     user = result.scalar_one_or_none()
 
     if not user:
-        # No account found — redirect with specific error so frontend can show helpful message
-        from urllib.parse import urlencode
-        params = urlencode({"error": "google_no_account", "email": google_email})
-        return RedirectResponse(url=f"{frontend_url}/#/login?{params}")
+        # No account found — try to auto-register via QBO/Client lookup
+        from models import Client
+        client_result = await db.execute(select(Client).where(Client.email == google_email))
+        client = client_result.scalar_one_or_none()
+
+        if not client:
+            from services.qbo_service import QBOService
+            qbo = QBOService()
+            qbo_customer = None
+            if qbo.is_connected():
+                try:
+                    qbo_customer = await qbo.find_customer_by_email(google_email)
+                except Exception:
+                    pass
+            if qbo_customer:
+                client = Client(
+                    name=qbo_customer["display_name"],
+                    email=google_email,
+                    qbo_customer_id=qbo_customer["id"],
+                    is_active=True,
+                )
+                db.add(client)
+                await db.flush()
+
+        if not client:
+            from urllib.parse import urlencode
+            params = urlencode({"error": "google_no_account", "email": google_email})
+            return RedirectResponse(url=f"{frontend_url}/#/login?{params}")
+
+        # Auto-create portal user
+        import secrets
+        user = User(
+            email=google_email,
+            hashed_password=get_password_hash(secrets.token_hex(32)),
+            full_name=google_name or google_email,
+            role=UserRole.client,
+            client_id=client.id,
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()
+        await db.commit()
+        await db.refresh(user)
 
     if not user.is_active:
         return RedirectResponse(url=f"{frontend_url}/#/login?error=google_inactive")
