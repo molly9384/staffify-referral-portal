@@ -23,11 +23,14 @@ async def send_email(to: list[str], subject: str, html: str) -> None:
     if not to:
         return
 
+    # Sanitize any non-ASCII characters to HTML entities so SMTP never chokes
+    html_safe = html.encode("ascii", "xmlcharrefreplace").decode("ascii")
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"Staffify <{settings.GMAIL_USER}>"
     msg["To"] = ", ".join(to)
-    msg.attach(MIMEText(html, "html", "utf-8"))
+    msg.attach(MIMEText(html_safe, "html", "utf-8"))
 
     def _send():
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
