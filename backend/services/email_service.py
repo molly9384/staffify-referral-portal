@@ -246,12 +246,13 @@ def email_invite(
     invite_url: str,
 ) -> tuple[str, str]:
     role_display = role.title()
+    article = "an" if role.lower() in ("owner", "admin") else "a"
     subject = "You're invited to join the Staffify Referral Portal"
     html = _wrap(f"""
       <h2 style="color:#111;font-size:20px;margin:0 0 12px;">You've been invited!</h2>
       <p style="margin:0 0 12px;">Hi {invitee_name},</p>
       <p style="margin:0 0 12px;"><strong>{inviter_name}</strong> has invited you to join the
-      <strong>Staffify Referral Portal</strong> as a <strong>{role_display}</strong>.</p>
+      <strong>Staffify Referral Portal</strong> as {article} <strong>{role_display}</strong>.</p>
       <p style="margin:0 0 24px;">Click the button below to accept your invitation and set your password.
       This link expires in <strong>7 days</strong>.</p>
       {_btn("Accept Invitation", invite_url)}
