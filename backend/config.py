@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
 
     SLACK_WEBHOOK_URL: str = ""
-    RESEND_API_KEY: str = ""
+    GMAIL_USER: str = ""
+    GMAIL_APP_PASSWORD: str = ""
     ADMIN_EMAIL: str = ""
 
     BASE_URL: str = "http://localhost:8000"

@@ -39,33 +39,38 @@ async def _send_new_referral_notifications(referral: Referral, referring_client_
         except Exception as e:
             print(f"Slack notification failed: {e}")
 
-    # Email via Resend
-    if settings.RESEND_API_KEY and settings.ADMIN_EMAIL:
+    # Email via Gmail SMTP
+    if settings.GMAIL_USER and settings.GMAIL_APP_PASSWORD and settings.ADMIN_EMAIL:
         recipients = [e.strip() for e in settings.ADMIN_EMAIL.split(",") if e.strip()]
         try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    "https://api.resend.com/emails",
-                    headers={
-                        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "from": "Staffify Referral Portal <noreply@gostaffify.com>",
-                        "to": recipients,
-                        "subject": f"New Referral: {referred}",
-                        "html": (
-                            f"<p>A new referral has been submitted.</p>"
-                            f"<ul>"
-                            f"<li><strong>Referred:</strong> {referred}</li>"
-                            f"<li><strong>From:</strong> {referrer}</li>"
-                            f"<li><strong>Date:</strong> {ref_date}</li>"
-                            f"</ul>"
-                            f"<p><a href='{settings.FRONTEND_URL}'>View in Portal</a></p>"
-                        ),
-                    },
-                    timeout=10,
-                )
+            import smtplib
+            import asyncio
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
+
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = f"New Referral: {referred}"
+            msg["From"] = f"Staffify Referral Portal <{settings.GMAIL_USER}>"
+            msg["To"] = ", ".join(recipients)
+
+            html_body = (
+                f"<p>A new referral has been submitted.</p>"
+                f"<ul>"
+                f"<li><strong>Referred:</strong> {referred}</li>"
+                f"<li><strong>From:</strong> {referrer}</li>"
+                f"<li><strong>Date:</strong> {ref_date}</li>"
+                f"</ul>"
+                f"<p><a href='{settings.FRONTEND_URL}'>View in Portal</a></p>"
+            )
+            msg.attach(MIMEText(html_body, "html"))
+
+            def send_email():
+                with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                    server.starttls()
+                    server.login(settings.GMAIL_USER, settings.GMAIL_APP_PASSWORD)
+                    server.sendmail(settings.GMAIL_USER, recipients, msg.as_string())
+
+            await asyncio.to_thread(send_email)
         except Exception as e:
             print(f"Email notification failed: {e}")
 
