@@ -68,6 +68,17 @@ async def register(
     db.add(new_user)
     await db.flush()
     await db.refresh(new_user)
+
+    # Welcome email for client-role users (admins don't need one)
+    if new_user.role == UserRole.client:
+        try:
+            import asyncio
+            from services.email_service import send_email, email_welcome_admin_created
+            subject, html = email_welcome_admin_created(new_user.full_name, new_user.email)
+            asyncio.create_task(send_email([new_user.email], subject, html))
+        except Exception as e:
+            print(f"Welcome email failed: {e}")
+
     return new_user
 
 
@@ -156,40 +167,22 @@ async def forgot_password(
         db.add(reset_token)
         await db.commit()
 
-        # Send email via Resend
-        resend_key = os.environ.get("RESEND_API_KEY", "")
-        frontend_url = os.environ.get("FRONTEND_URL", "https://staffify-referral-frontend.onrender.com")
-        reset_url = f"{frontend_url}/#/reset-password?token={token}"
-        if resend_key:
-            try:
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    await client.post(
-                        "https://api.resend.com/emails",
-                        headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                        json={
-                            "from": "Staffify <onboarding@resend.dev>",
-                            "to": [user.email],
-                            "subject": "Reset your Staffify password",
-                            "html": f"""
-                            <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
-                              <img src="https://staffify-referral-frontend.onrender.com/logo.png" alt="Staffify" style="height:40px;margin-bottom:24px;" />
-                              <h2 style="color:#111;font-size:20px;margin-bottom:8px;">Reset your password</h2>
-                              <p style="color:#555;font-size:14px;margin-bottom:24px;">
-                                Click the button below to reset your password. This link expires in 1 hour.
-                              </p>
-                              <a href="{reset_url}" style="display:inline-block;background:#1abde1;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">
-                                Reset Password
-                              </a>
-                              <p style="color:#999;font-size:12px;margin-top:24px;">
-                                If you didn't request this, you can safely ignore this email.
-                              </p>
-                            </div>
-                            """,
-                        },
-                    )
-            except Exception as e:
-                print(f"Email send failed: {e}")
+        reset_url = f"{settings.FRONTEND_URL}/#/reset-password?token={token}"
+        try:
+            from services.email_service import send_email, _wrap, _btn
+            subject = "Reset your Staffify password"
+            html = _wrap(f"""
+              <h2 style="color:#111;font-size:20px;margin:0 0 12px;">Reset your password</h2>
+              <p style="margin:0 0 12px;">Click the button below to reset your password.
+              This link expires in <strong>1 hour</strong>.</p>
+              {_btn("Reset Password", reset_url)}
+              <p style="margin:20px 0 0;font-size:12px;color:#aaa;">
+                If you didn't request this, you can safely ignore this email.
+              </p>
+            """)
+            await send_email([user.email], subject, html)
+        except Exception as e:
+            print(f"Password reset email failed: {e}")
     return {"message": "If an account exists with that email, a reset link has been sent."}
 
 
@@ -252,6 +245,16 @@ async def register_client(request: ClientRegisterRequest, db: AsyncSession = Dep
     await db.flush()
     await db.refresh(new_user)
     await db.commit()
+
+    # Welcome email
+    try:
+        import asyncio
+        from services.email_service import send_email, email_welcome_self_registered
+        subject, html = email_welcome_self_registered(new_user.full_name, new_user.email)
+        asyncio.create_task(send_email([new_user.email], subject, html))
+    except Exception as e:
+        print(f"Welcome email failed: {e}")
+
     return new_user
 
 

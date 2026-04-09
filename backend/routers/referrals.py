@@ -145,6 +145,17 @@ async def create_referral(
     referring_client_name = created.referring_client.name if created.referring_client else "Unknown"
     asyncio.create_task(_send_new_referral_notifications(created, referring_client_name))
 
+    # Confirmation email to the referring client
+    if created.referring_client_id:
+        try:
+            from services.email_service import send_email, get_client_emails, email_referral_confirmation
+            client_emails = await get_client_emails(db, created.referring_client_id)
+            if client_emails:
+                subject, html = email_referral_confirmation(referring_client_name, created.referred_name or "your contact")
+                asyncio.create_task(send_email(client_emails, subject, html))
+        except Exception as e:
+            print(f"Referral confirmation email failed: {e}")
+
     return created
 
 
@@ -236,6 +247,7 @@ async def update_referral_status(
         raise HTTPException(status_code=404, detail="Referral not found")
 
     from models import Client
+    prev_status = referral.status
     new_status = status_update.status
     referral.status = new_status
 
@@ -302,6 +314,36 @@ async def update_referral_status(
 
     await db.flush()
     await db.refresh(referral)
+
+    # Client status-change emails
+    if referral.referring_client_id:
+        try:
+            import asyncio
+            from services.email_service import (
+                send_email, get_client_emails,
+                email_referral_active, email_referral_reinstated, email_referral_paused,
+            )
+            client_emails = await get_client_emails(db, referral.referring_client_id)
+            client_name = referral.referring_client.name if referral.referring_client else ""
+            referred = referral.referred_name or "your contact"
+
+            if client_emails:
+                if new_status == ReferralStatus.va_billing and prev_status == ReferralStatus.paused:
+                    # Reinstated from paused
+                    subject, html = email_referral_reinstated(client_name, referred)
+                    asyncio.create_task(send_email(client_emails, subject, html))
+                elif new_status == ReferralStatus.va_billing:
+                    # Newly active
+                    act = referral.activation_date.strftime("%B %-d, %Y") if referral.activation_date else "today"
+                    subject, html = email_referral_active(client_name, referred, act)
+                    asyncio.create_task(send_email(client_emails, subject, html))
+                elif new_status == ReferralStatus.paused:
+                    reason = status_update.notes or ""
+                    subject, html = email_referral_paused(client_name, referred, reason)
+                    asyncio.create_task(send_email(client_emails, subject, html))
+        except Exception as e:
+            print(f"Status-change client email failed: {e}")
+
     return referral
 
 

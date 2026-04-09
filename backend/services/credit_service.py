@@ -163,6 +163,8 @@ class CreditService:
         credits_created = 0
         total_amount = Decimal("0.00")
         errors = []
+        # Track new credits per referring client for the statement email
+        client_statement: dict = {}  # client_id → {name, credits[], total}
 
         for referral in active_referrals:
             try:
@@ -235,6 +237,21 @@ class CreditService:
                     credits_created += 1
                     total_amount += credit_amount
 
+                    # Collect for statement email
+                    cid = str(referral.referring_client_id)
+                    if cid not in client_statement:
+                        client_statement[cid] = {
+                            "name": referral.referring_client.name if referral.referring_client else "",
+                            "credits": [],
+                            "total": Decimal("0.00"),
+                        }
+                    client_statement[cid]["credits"].append({
+                        "referred_name": referral.referred_name or "—",
+                        "period": f"{period_start.strftime('%b %-d')} – {period_end.strftime('%b %-d, %Y')}",
+                        "amount": credit_amount,
+                    })
+                    client_statement[cid]["total"] += credit_amount
+
                 processed += 1
 
             except Exception as e:
@@ -244,6 +261,24 @@ class CreditService:
                 continue
 
         await self.db.flush()
+
+        # Send pending credits statement to each referring client
+        if client_statement:
+            try:
+                from services.email_service import (
+                    send_email, get_client_emails, email_pending_credits_statement,
+                )
+                import uuid as uuid_mod
+                for cid, data in client_statement.items():
+                    emails = await get_client_emails(self.db, uuid_mod.UUID(cid))
+                    if emails:
+                        subject, html = email_pending_credits_statement(
+                            data["name"], data["credits"], data["total"]
+                        )
+                        await send_email(emails, subject, html)
+            except Exception as e:
+                print(f"[email] Pending credits statement failed: {e}")
+
         return {
             "processed": processed,
             "credits_created": credits_created,
@@ -387,6 +422,7 @@ class CreditService:
         applied = 0
         skipped = 0
         total_applied = Decimal("0.00")
+        client_applied: dict = {}  # client_id → {name, credits[], total}
 
         for credit in pending_credits:
             try:
@@ -446,12 +482,49 @@ class CreditService:
                 applied += 1
                 total_applied += apply_amount
 
+                # Collect for applied statement email
+                cid = str(credit.referral.referring_client_id)
+                rc = credit.referral.referring_client
+                if cid not in client_applied:
+                    client_applied[cid] = {
+                        "name": rc.name if rc else "",
+                        "credits": [],
+                        "total": Decimal("0.00"),
+                    }
+                period = ""
+                if credit.period_start and credit.period_end:
+                    period = f"{credit.period_start.strftime('%b %-d')} – {credit.period_end.strftime('%b %-d, %Y')}"
+                client_applied[cid]["credits"].append({
+                    "referred_name": credit.referral.referred_name or "—",
+                    "period": period,
+                    "amount": apply_amount,
+                })
+                client_applied[cid]["total"] += apply_amount
+
             except Exception as e:
                 credit.notes = ((credit.notes or "") + f" [Error: {str(e)}]").strip()
                 print(f"Error applying credit {credit.id}: {e}")
                 continue
 
         await self.db.flush()
+
+        # Send applied credits statement to each referring client
+        if client_applied:
+            try:
+                from services.email_service import (
+                    send_email, get_client_emails, email_applied_credits_statement,
+                )
+                import uuid as uuid_mod
+                for cid, data in client_applied.items():
+                    emails = await get_client_emails(self.db, uuid_mod.UUID(cid))
+                    if emails:
+                        subject, html = email_applied_credits_statement(
+                            data["name"], data["credits"], data["total"]
+                        )
+                        await send_email(emails, subject, html)
+            except Exception as e:
+                print(f"[email] Applied credits statement failed: {e}")
+
         return {
             "applied": applied,
             "skipped": skipped,
