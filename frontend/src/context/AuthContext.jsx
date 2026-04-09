@@ -36,6 +36,19 @@ export function AuthProvider({ children }) {
     return userData
   }, [])
 
+  const loginWithToken = useCallback((data) => {
+    localStorage.setItem('access_token', data.access_token)
+    const userData = {
+      id: data.user_id,
+      full_name: data.full_name,
+      role: data.role,
+      client_id: data.client_id || null,
+    }
+    localStorage.setItem('user', JSON.stringify(userData))
+    setUser(userData)
+    return userData
+  }, [])
+
   const logout = useCallback(() => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('user')
@@ -64,6 +77,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     login,
+    loginWithToken,
     logout,
     refreshUser,
     isAdmin: user?.role === 'admin',

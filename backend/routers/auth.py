@@ -329,6 +329,93 @@ async def restore_portal_user(
     return {"message": "User restored"}
 
 
+@router.get("/google")
+async def google_login():
+    """Redirect user to Google's OAuth consent screen."""
+    from urllib.parse import urlencode
+    params = urlencode({
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": f"{settings.BASE_URL}/api/auth/google/callback",
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    })
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+
+@router.get("/google/callback")
+async def google_callback(code: str = None, error: str = None, db: AsyncSession = Depends(get_db)):
+    """Handle Google OAuth callback, issue JWT, redirect to frontend."""
+    from fastapi.responses import RedirectResponse
+    frontend_url = settings.FRONTEND_URL
+
+    if error or not code:
+        return RedirectResponse(url=f"{frontend_url}/#/login?error=google_cancelled")
+
+    # Exchange code for tokens
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": f"{settings.BASE_URL}/api/auth/google/callback",
+                    "grant_type": "authorization_code",
+                },
+            )
+            token_data = token_resp.json()
+            if "error" in token_data:
+                return RedirectResponse(url=f"{frontend_url}/#/login?error=google_token_failed")
+
+            # Get user info
+            userinfo_resp = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {token_data['access_token']}"},
+            )
+            userinfo = userinfo_resp.json()
+    except Exception:
+        return RedirectResponse(url=f"{frontend_url}/#/login?error=google_failed")
+
+    google_email = userinfo.get("email", "").lower()
+    google_name = userinfo.get("name", "")
+
+    if not google_email:
+        return RedirectResponse(url=f"{frontend_url}/#/login?error=google_no_email")
+
+    # Look up existing user
+    result = await db.execute(select(User).where(User.email == google_email))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # No account found — redirect with specific error so frontend can show helpful message
+        from urllib.parse import urlencode
+        params = urlencode({"error": "google_no_account", "email": google_email})
+        return RedirectResponse(url=f"{frontend_url}/#/login?{params}")
+
+    if not user.is_active:
+        return RedirectResponse(url=f"{frontend_url}/#/login?error=google_inactive")
+
+    # Issue JWT
+    access_token = create_access_token(
+        data={"sub": str(user.id), "role": user.role.value},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    from urllib.parse import urlencode
+    params = urlencode({
+        "google_token": access_token,
+        "role": user.role.value,
+        "user_id": str(user.id),
+        "full_name": google_name or user.full_name,
+        "client_id": str(user.client_id) if user.client_id else "",
+    })
+    return RedirectResponse(url=f"{frontend_url}/#/login?{params}")
+
+
 @router.post("/reset-password")
 async def reset_password_endpoint(
     request: ResetPasswordRequest,

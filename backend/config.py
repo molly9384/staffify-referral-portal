@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     QBO_REFRESH_TOKEN: str = ""
     QBO_ENVIRONMENT: str = "production"  # or "sandbox"
 
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
     BASE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:5173"
 
