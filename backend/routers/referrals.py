@@ -55,6 +55,10 @@ async def create_referral(
         if current_user.client_id != referral_in.referring_client_id:
             raise HTTPException(status_code=403, detail="Cannot create referral for another client")
 
+    from datetime import date as date_type
+    if not referral_in.referral_date:
+        referral_in.referral_date = date_type.today()
+
     referral = Referral(**referral_in.model_dump())
     db.add(referral)
     await db.flush()

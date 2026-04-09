@@ -29,6 +29,7 @@ export function AuthProvider({ children }) {
       id: data.user_id,
       full_name: data.full_name,
       role: data.role,
+      client_id: data.client_id || null,
     }
     localStorage.setItem('user', JSON.stringify(userData))
     setUser(userData)

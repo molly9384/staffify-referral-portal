@@ -63,6 +63,16 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TYPE creditstatus ADD VALUE IF NOT EXISTS 'eligible'"))
         await conn.commit()
 
+    # Add new referral columns if they don't exist
+    async with engine.connect() as conn:
+        for col_sql in [
+            "ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referred_company VARCHAR(255)",
+            "ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referred_phone VARCHAR(50)",
+            "ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referred_website VARCHAR(255)",
+        ]:
+            await conn.execute(text(col_sql))
+        await conn.commit()
+
     # Create admin user if none exists
     await create_admin_user()
 

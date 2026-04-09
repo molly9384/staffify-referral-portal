@@ -8,12 +8,15 @@ export default function NewReferral() {
   const navigate = useNavigate()
   const [form, setForm] = useState({
     referred_name: '',
-    referred_email: '',
+    referred_company: '',
+    referred_phone: '',
+    referred_website: '',
     pipeline_notes: '',
-    referral_date: new Date().toISOString().split('T')[0],
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -27,9 +30,11 @@ export default function NewReferral() {
       await createReferral({
         referring_client_id: user.client_id,
         referred_name: form.referred_name,
-        referred_email: form.referred_email || null,
+        referred_company: form.referred_company,
+        referred_phone: form.referred_phone,
+        referred_website: form.referred_website || null,
         pipeline_notes: form.pipeline_notes || null,
-        referral_date: form.referral_date,
+        referral_date: new Date().toISOString().split('T')[0],
       })
       navigate('/client/referrals')
     } catch (err) {
@@ -65,52 +70,36 @@ export default function NewReferral() {
 
       <div className="card p-6">
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="label">
-              Contact Name or Company <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              className="input"
-              required
-              placeholder="e.g. Jane Smith or Acme Corp"
-              value={form.referred_name}
-              onChange={(e) => setForm((f) => ({ ...f, referred_name: e.target.value }))}
-            />
-            <p className="text-xs text-gray-400 mt-1">Enter the name of the person or company you're referring.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="label">Contact Name <span className="text-red-500">*</span></label>
+              <input type="text" className="input" required placeholder="Jane Smith" value={form.referred_name} onChange={set('referred_name')} />
+            </div>
+            <div>
+              <label className="label">
+                Company <span className="text-red-500">*</span>
+                <span className="text-gray-400 font-normal ml-1">(write N/A if unknown)</span>
+              </label>
+              <input type="text" className="input" required placeholder="Acme Corp or N/A" value={form.referred_company} onChange={set('referred_company')} />
+            </div>
+            <div>
+              <label className="label">Phone Number <span className="text-red-500">*</span></label>
+              <input type="tel" className="input" required placeholder="(555) 000-0000" value={form.referred_phone} onChange={set('referred_phone')} />
+            </div>
+            <div>
+              <label className="label">Company Website <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input type="url" className="input" placeholder="https://example.com" value={form.referred_website} onChange={set('referred_website')} />
+            </div>
           </div>
 
           <div>
-            <label className="label">Their Email Address (optional)</label>
-            <input
-              type="email"
-              className="input"
-              placeholder="contact@example.com"
-              value={form.referred_email}
-              onChange={(e) => setForm((f) => ({ ...f, referred_email: e.target.value }))}
-            />
-            <p className="text-xs text-gray-400 mt-1">If provided, Staffify may use this to reach out directly.</p>
-          </div>
-
-          <div>
-            <label className="label">Referral Date</label>
-            <input
-              type="date"
-              className="input"
-              required
-              value={form.referral_date}
-              onChange={(e) => setForm((f) => ({ ...f, referral_date: e.target.value }))}
-            />
-          </div>
-
-          <div>
-            <label className="label">Additional Notes (optional)</label>
+            <label className="label">Additional Notes <span className="text-gray-400 font-normal">(optional)</span></label>
             <textarea
               className="input"
               rows={3}
               placeholder="Any context about this referral that might help our team…"
               value={form.pipeline_notes}
-              onChange={(e) => setForm((f) => ({ ...f, pipeline_notes: e.target.value }))}
+              onChange={set('pipeline_notes')}
             />
           </div>
 

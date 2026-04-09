@@ -58,6 +58,12 @@ export const getPortalUsers = () =>
 export const deletePortalUser = (userId) =>
   apiClient.delete(`/auth/portal-users/${userId}`).then((r) => r.data)
 
+export const archivePortalUser = (userId) =>
+  apiClient.patch(`/auth/portal-users/${userId}/archive`).then((r) => r.data)
+
+export const restorePortalUser = (userId) =>
+  apiClient.patch(`/auth/portal-users/${userId}/restore`).then((r) => r.data)
+
 export const resetPassword = (data) =>
   apiClient.post('/auth/reset-password', data).then((r) => r.data)
 

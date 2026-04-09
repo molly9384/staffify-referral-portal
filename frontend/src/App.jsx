@@ -15,6 +15,7 @@ import ReferralDetail from './pages/internal/ReferralDetail'
 import Clients from './pages/internal/Clients'
 import Credits from './pages/internal/Credits'
 import Settings from './pages/internal/Settings'
+import PortalUsers from './pages/internal/PortalUsers'
 
 // Client portal pages
 import ClientLayout from './components/ClientLayout'
@@ -22,6 +23,8 @@ import ClientDashboard from './pages/client/ClientDashboard'
 import MyReferrals from './pages/client/MyReferrals'
 import NewReferral from './pages/client/NewReferral'
 import MyCredits from './pages/client/MyCredits'
+import ClientSettings from './pages/client/ClientSettings'
+import Policy from './pages/client/Policy'
 
 function RootRedirect() {
   const { user, loading } = useAuth()
@@ -56,6 +59,7 @@ export default function App() {
         <Route path="clients" element={<Clients />} />
         <Route path="credits" element={<Credits />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="portal-users" element={<PortalUsers />} />
       </Route>
 
       {/* Client portal routes */}
@@ -72,6 +76,8 @@ export default function App() {
         <Route path="referrals" element={<MyReferrals />} />
         <Route path="referrals/new" element={<NewReferral />} />
         <Route path="credits" element={<MyCredits />} />
+        <Route path="settings" element={<ClientSettings />} />
+        <Route path="policy" element={<Policy />} />
       </Route>
 
       {/* Legacy /portal/* aliases → redirect to /client/* */}

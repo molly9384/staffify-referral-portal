@@ -16,6 +16,7 @@ class Token(BaseModel):
     role: str
     user_id: str
     full_name: str
+    client_id: Optional[uuid.UUID] = None
 
 
 class TokenData(BaseModel):
@@ -167,19 +168,25 @@ class ReferralBase(BaseModel):
     referring_client_id: uuid.UUID
     referred_name: str
     referred_email: Optional[EmailStr] = None
+    referred_company: Optional[str] = None
+    referred_phone: Optional[str] = None
+    referred_website: Optional[str] = None
     status: ReferralStatus = ReferralStatus.referred
     pipeline_notes: Optional[str] = None
     referral_date: date
 
 
 class ReferralCreate(ReferralBase):
-    pass
+    referral_date: Optional[date] = None
 
 
 class ReferralUpdate(BaseModel):
     referred_client_id: Optional[uuid.UUID] = None
     referred_name: Optional[str] = None
     referred_email: Optional[EmailStr] = None
+    referred_company: Optional[str] = None
+    referred_phone: Optional[str] = None
+    referred_website: Optional[str] = None
     referral_date: Optional[date] = None
     status: Optional[ReferralStatus] = None
     pipeline_notes: Optional[str] = None

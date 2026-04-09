@@ -42,6 +42,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         role=user.role.value,
         user_id=str(user.id),
         full_name=user.full_name,
+        client_id=str(user.client_id) if user.client_id else None,
     )
 
 
@@ -266,7 +267,7 @@ async def list_portal_users(
         select(User)
         .where(User.role == UserRole.client)
         .options(selectinload(User.client))
-        .order_by(User.created_at.desc())
+        .order_by(User.is_active.desc(), User.created_at.desc())
     )
     users = result.scalars().all()
     return [
@@ -295,6 +296,37 @@ async def delete_portal_user(
         raise HTTPException(status_code=404, detail="User not found")
     await db.delete(user)
     await db.commit()
+
+
+@router.patch("/portal-users/{user_id}/archive", status_code=status.HTTP_200_OK)
+async def archive_portal_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Archive a client portal user (soft delete — data preserved, login disabled)."""
+    result = await db.execute(select(User).where(User.id == user_id, User.role == UserRole.client))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_active = False
+    await db.commit()
+    return {"message": "User archived"}
+
+@router.patch("/portal-users/{user_id}/restore", status_code=status.HTTP_200_OK)
+async def restore_portal_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Restore an archived portal user."""
+    result = await db.execute(select(User).where(User.id == user_id, User.role == UserRole.client))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_active = True
+    await db.commit()
+    return {"message": "User restored"}
 
 
 @router.post("/reset-password")
