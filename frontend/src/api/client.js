@@ -113,6 +113,15 @@ export const updateReferralStatus = (id, data) =>
 export const getReferralCredits = (id) =>
   apiClient.get(`/referrals/${id}/credits`).then((r) => r.data)
 
+export const archiveReferral = (id) =>
+  apiClient.patch(`/referrals/${id}/archive`).then((r) => r.data)
+
+export const restoreReferral = (id) =>
+  apiClient.patch(`/referrals/${id}/restore`).then((r) => r.data)
+
+export const deleteReferral = (id) =>
+  apiClient.delete(`/referrals/${id}`)
+
 // ---- Virtual Assistants ----
 
 export const getVAsForReferral = (referralId) =>

@@ -20,6 +20,7 @@ router = APIRouter()
 @router.get("", response_model=List[ReferralOut])
 async def list_referrals(
     status_filter: Optional[str] = Query(None, alias="status"),
+    archived: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -31,6 +32,13 @@ async def list_referrals(
 
     if current_user.role == UserRole.client:
         query = query.where(Referral.referring_client_id == current_user.client_id)
+        query = query.where(Referral.is_active == True)
+    else:
+        # Admins/staff: filter by archived flag (default to active only)
+        if archived:
+            query = query.where(Referral.is_active == False)
+        else:
+            query = query.where(Referral.is_active == True)
 
     if status_filter:
         try:
@@ -230,6 +238,52 @@ async def update_referral_status(
     await db.flush()
     await db.refresh(referral)
     return referral
+
+
+@router.patch("/{referral_id}/archive", status_code=status.HTTP_200_OK)
+async def archive_referral(
+    referral_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    result = await db.execute(select(Referral).where(Referral.id == referral_id))
+    referral = result.scalar_one_or_none()
+    if not referral:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    referral.is_active = False
+    await db.commit()
+    return {"message": "Referral archived"}
+
+
+@router.patch("/{referral_id}/restore", status_code=status.HTTP_200_OK)
+async def restore_referral(
+    referral_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    result = await db.execute(select(Referral).where(Referral.id == referral_id))
+    referral = result.scalar_one_or_none()
+    if not referral:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    referral.is_active = True
+    await db.commit()
+    return {"message": "Referral restored"}
+
+
+@router.delete("/{referral_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_referral(
+    referral_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    result = await db.execute(select(Referral).where(Referral.id == referral_id))
+    referral = result.scalar_one_or_none()
+    if not referral:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    if referral.is_active:
+        raise HTTPException(status_code=400, detail="Archive the referral before deleting it.")
+    await db.delete(referral)
+    await db.commit()
 
 
 @router.get("/{referral_id}/credits", response_model=List[CreditLedgerOut])
