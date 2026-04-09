@@ -41,6 +41,7 @@ async def _send_new_referral_notifications(referral: Referral, referring_client_
 
     # Email via Resend
     if settings.RESEND_API_KEY and settings.ADMIN_EMAIL:
+        recipients = [e.strip() for e in settings.ADMIN_EMAIL.split(",") if e.strip()]
         try:
             async with httpx.AsyncClient() as client:
                 await client.post(
@@ -51,7 +52,7 @@ async def _send_new_referral_notifications(referral: Referral, referring_client_
                     },
                     json={
                         "from": "Staffify Referral Portal <noreply@gostaffify.com>",
-                        "to": [settings.ADMIN_EMAIL],
+                        "to": recipients,
                         "subject": f"New Referral: {referred}",
                         "html": (
                             f"<p>A new referral has been submitted.</p>"
