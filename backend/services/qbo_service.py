@@ -129,6 +129,8 @@ class QBOService:
                 # Token expired, refresh and retry
                 await self.refresh_access_token()
                 response = await client.request(method, url, headers=self._get_headers(), **kwargs)
+            if not response.is_success:
+                print(f"[DEBUG QBO] {method} {url} → {response.status_code}: {response.text[:500]}")
             response.raise_for_status()
             return response.json()
 
@@ -205,16 +207,14 @@ class QBOService:
         sync_token = invoice.get("SyncToken", "0")
         existing_lines = invoice.get("Line", [])
 
-        # Build the credit line item
+        # Build the credit line item as a discount (DiscountLineDetail)
         credit_line = {
-            "Amount": -abs(credit_amount),
-            "DetailType": "SalesItemLineDetail",
+            "Amount": abs(credit_amount),
+            "DetailType": "DiscountLineDetail",
             "Description": description,
-            "SalesItemLineDetail": {
-                "ItemRef": {
-                    "value": "DISCOUNT",
-                    "name": "Discount",
-                }
+            "DiscountLineDetail": {
+                "PercentBased": False,
+                "DiscountPercent": 0,
             },
         }
 
