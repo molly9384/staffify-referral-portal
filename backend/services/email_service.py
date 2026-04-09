@@ -43,7 +43,9 @@ async def send_email(to: list[str], subject: str, html: str) -> None:
     try:
         await asyncio.to_thread(_send)
     except Exception as e:
+        import traceback
         print(f"[email] Failed to send '{subject}' to {to}: {e}")
+        print(f"[email] Traceback:\n{traceback.format_exc()}")
 
 
 async def get_client_emails(db, client_id) -> list[str]:
