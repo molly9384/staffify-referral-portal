@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getReferrals, getClients, createReferral, archiveReferral, restoreReferral, deleteReferral } from '../../api/client'
 import { statusBadge, formatDate, formatCurrency } from '../../utils/format'
+import { getSeenReferralIds } from '../../utils/storage'
 
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
@@ -190,10 +191,18 @@ export default function Referrals() {
                 {referrals.map((ref) => {
                   const badge = statusBadge(ref.status)
                   const busy = actionLoading === ref.id
+                  const isNew = ref.status === 'referred' && !getSeenReferralIds().has(ref.id)
                   return (
                     <tr key={ref.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-3.5">
-                        <p className="font-medium text-gray-900">{ref.referred_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">{ref.referred_name}</p>
+                          {isNew && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-primary-100 text-primary-700">
+                              New
+                            </span>
+                          )}
+                        </div>
                         {ref.referred_company && <p className="text-xs text-gray-400">{ref.referred_company}</p>}
                       </td>
                       <td className="px-6 py-3.5 text-gray-600">{ref.referring_client?.name ?? '—'}</td>

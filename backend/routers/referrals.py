@@ -21,9 +21,14 @@ router = APIRouter()
 async def _send_new_referral_notifications(referral: Referral, referring_client_name: str):
     import httpx
 
-    referred = referral.referred_name or "Unknown"
-    referrer = referring_client_name
-    ref_date = referral.referral_date.strftime("%B %-d, %Y") if referral.referral_date else "—"
+    referred   = referral.referred_name or "—"
+    company    = referral.referred_company or "—"
+    email      = referral.referred_email or "—"
+    phone      = referral.referred_phone or "—"
+    website    = referral.referred_website or "—"
+    notes      = referral.pipeline_notes or "—"
+    referrer   = referring_client_name
+    ref_date   = referral.referral_date.strftime("%B %-d, %Y") if referral.referral_date else "—"
 
     # Slack
     if settings.SLACK_WEBHOOK_URL:
@@ -31,46 +36,42 @@ async def _send_new_referral_notifications(referral: Referral, referring_client_
             async with httpx.AsyncClient() as client:
                 await client.post(
                     settings.SLACK_WEBHOOK_URL,
-                    json={
-                        "text": f":tada: *New Referral Submitted*\n*Referred:* {referred}\n*From:* {referrer}\n*Date:* {ref_date}"
-                    },
+                    json={"text": (
+                        f":tada: *New Referral Submitted*\n"
+                        f"*Referred:* {referred}\n"
+                        f"*Company:* {company}\n"
+                        f"*Email:* {email}\n"
+                        f"*Phone:* {phone}\n"
+                        f"*Website:* {website}\n"
+                        f"*Referred By:* {referrer}\n"
+                        f"*Date:* {ref_date}\n"
+                        f"*Notes:* {notes}"
+                    )},
                     timeout=10,
                 )
         except Exception as e:
             print(f"Slack notification failed: {e}")
 
-    # Email via Gmail SMTP
-    if settings.GMAIL_USER and settings.GMAIL_APP_PASSWORD and settings.ADMIN_EMAIL:
+    # Admin email notification
+    if settings.ADMIN_EMAIL:
         recipients = [e.strip() for e in settings.ADMIN_EMAIL.split(",") if e.strip()]
         try:
-            import smtplib
-            import asyncio
-            from email.mime.multipart import MIMEMultipart
-            from email.mime.text import MIMEText
-
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = f"New Referral: {referred}"
-            msg["From"] = f"Staffify Referral Portal <{settings.GMAIL_USER}>"
-            msg["To"] = ", ".join(recipients)
-
+            from services.email_service import send_email
             html_body = (
-                f"<p>A new referral has been submitted.</p>"
-                f"<ul>"
-                f"<li><strong>Referred:</strong> {referred}</li>"
-                f"<li><strong>From:</strong> {referrer}</li>"
-                f"<li><strong>Date:</strong> {ref_date}</li>"
-                f"</ul>"
-                f"<p><a href='{settings.FRONTEND_URL}'>View in Portal</a></p>"
+                f"<p style='margin:0 0 16px;'>A new referral has been submitted.</p>"
+                f"<table style='border-collapse:collapse;font-size:14px;'>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Referred</td><td style='padding:4px 0;'><strong>{referred}</strong></td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Company</td><td style='padding:4px 0;'>{company}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Email</td><td style='padding:4px 0;'>{email}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Phone</td><td style='padding:4px 0;'>{phone}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Website</td><td style='padding:4px 0;'>{website}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Referred By</td><td style='padding:4px 0;'>{referrer}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Date</td><td style='padding:4px 0;'>{ref_date}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;vertical-align:top;'>Notes</td><td style='padding:4px 0;'>{notes}</td></tr>"
+                f"</table>"
+                f"<p style='margin-top:20px;'><a href='{settings.FRONTEND_URL}' style='color:#1abde1;'>View in Portal</a></p>"
             )
-            msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-            def send_email():
-                with smtplib.SMTP("smtp.gmail.com", 587) as server:
-                    server.starttls()
-                    server.login(settings.GMAIL_USER, settings.GMAIL_APP_PASSWORD)
-                    server.sendmail(settings.GMAIL_USER, recipients, msg.as_string())
-
-            await asyncio.to_thread(send_email)
+            await send_email(recipients, f"New Referral: {referred}", html_body)
         except Exception as e:
             print(f"Email notification failed: {e}")
 
@@ -120,6 +121,36 @@ async def create_referral(
     if current_user.role == UserRole.client:
         if current_user.client_id != referral_in.referring_client_id:
             raise HTTPException(status_code=403, detail="Cannot create referral for another client")
+
+    # Duplicate check — block if referred person already exists as a client or active referral
+    if referral_in.referred_name:
+        from sqlalchemy import func
+        from models import Client
+        name_lower = referral_in.referred_name.strip().lower()
+
+        existing_referral = await db.execute(
+            select(Referral.id).where(
+                func.lower(Referral.referred_name) == name_lower,
+                Referral.is_active == True,
+            ).limit(1)
+        )
+        if existing_referral.scalar_one_or_none():
+            raise HTTPException(
+                status_code=400,
+                detail=f"A referral for \"{referral_in.referred_name}\" already exists in the portal."
+            )
+
+        existing_client = await db.execute(
+            select(Client.id).where(
+                func.lower(Client.name) == name_lower,
+                Client.is_active == True,
+            ).limit(1)
+        )
+        if existing_client.scalar_one_or_none():
+            raise HTTPException(
+                status_code=400,
+                detail=f"\"{referral_in.referred_name}\" is already an existing Staffify client and is not eligible for referral."
+            )
 
     from datetime import date as date_type
     if not referral_in.referral_date:

@@ -11,7 +11,6 @@ import email.policy
 from config import settings
 
 BRAND_COLOR = "#1abde1"
-LOGO_URL = "https://portal.gostaffify.com/logo.png"
 
 
 # ─── Core send helper ─────────────────────────────────────────────────────────
@@ -67,9 +66,10 @@ async def get_client_emails(db, client_id) -> list[str]:
 # ─── Layout wrapper ───────────────────────────────────────────────────────────
 
 def _wrap(body: str) -> str:
+    logo_url = f"{settings.FRONTEND_URL}/logo.png"
     return f"""
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#333;">
-      <img src="{LOGO_URL}" alt="Staffify" style="height:36px;margin-bottom:28px;" />
+      <img src="{logo_url}" alt="Staffify" style="height:40px;margin-bottom:28px;" />
       {body}
       <hr style="border:none;border-top:1px solid #eee;margin:32px 0 16px;" />
       <p style="color:#aaa;font-size:12px;margin:0;">Staffify LLC &middot; Referral Portal<br/>

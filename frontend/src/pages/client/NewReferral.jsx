@@ -92,10 +92,11 @@ export default function NewReferral() {
               <label className="label">Phone Number <span className="text-red-500">*</span></label>
               <input type="tel" className="input" required placeholder="(555) 000-0000" value={form.referred_phone} onChange={set('referred_phone')} />
             </div>
-            <div>
-              <label className="label">Company Website <span className="text-gray-400 font-normal">(optional)</span></label>
-              <input type="text" className="input" placeholder="example.com" value={form.referred_website} onChange={set('referred_website')} />
-            </div>
+          </div>
+
+          <div>
+            <label className="label">Company Website <span className="text-gray-400 font-normal">(optional)</span></label>
+            <input type="text" className="input" placeholder="example.com" value={form.referred_website} onChange={set('referred_website')} />
           </div>
 
           <div>

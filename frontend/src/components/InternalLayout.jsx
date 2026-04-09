@@ -1,7 +1,8 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useEffect, useState } from 'react'
 import { getReferrals } from '../api/client'
+import { getSeenReferralIds, markReferralsAsSeen } from '../utils/storage'
 
 const navItems = [
   {
@@ -64,13 +65,30 @@ const navItems = [
 export default function InternalLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [newReferralsCount, setNewReferralsCount] = useState(0)
+  const [referredIds, setReferredIds] = useState([])
 
+  // Re-fetch referred referrals on every navigation to keep badge accurate
   useEffect(() => {
     getReferrals({ status: 'referred' })
-      .then((refs) => setNewReferralsCount(refs.length))
+      .then((refs) => {
+        const ids = refs.map((r) => r.id)
+        setReferredIds(ids)
+        const seen = getSeenReferralIds()
+        const unseen = ids.filter((id) => !seen.has(id))
+        setNewReferralsCount(unseen.length)
+      })
       .catch(() => {})
-  }, [])
+  }, [location.pathname])
+
+  // When on the referrals page, mark all current referred IDs as seen
+  useEffect(() => {
+    if (location.pathname.startsWith('/internal/referrals') && referredIds.length > 0) {
+      markReferralsAsSeen(referredIds)
+      setNewReferralsCount(0)
+    }
+  }, [location.pathname, referredIds])
 
   const handleLogout = () => {
     logout()
@@ -107,7 +125,7 @@ export default function InternalLayout() {
               <span className="flex-1">{item.label}</span>
               {item.to === '/internal/referrals' && newReferralsCount > 0 && (
                 <span className="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary-600 text-white text-xs font-semibold">
-                  {newReferralsCount}
+                  {newReferralsCount > 9 ? '9+' : newReferralsCount}
                 </span>
               )}
             </NavLink>
