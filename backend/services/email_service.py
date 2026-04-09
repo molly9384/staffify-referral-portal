@@ -5,8 +5,8 @@ All outgoing emails use Gmail SMTP (GMAIL_USER + GMAIL_APP_PASSWORD env vars).
 import asyncio
 import smtplib
 from decimal import Decimal
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from email.message import EmailMessage
+import email.policy
 
 from config import settings
 
@@ -23,19 +23,21 @@ async def send_email(to: list[str], subject: str, html: str) -> None:
     if not to:
         return
 
-    # Sanitize any non-ASCII characters to HTML entities so SMTP never chokes
+    # Sanitize everything to pure ASCII (non-ASCII chars become HTML entities)
     html_safe = html.encode("ascii", "xmlcharrefreplace").decode("ascii")
+    subject_safe = subject.encode("ascii", "xmlcharrefreplace").decode("ascii")
+    gmail_user = settings.GMAIL_USER.strip()
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"Staffify <{settings.GMAIL_USER}>"
-    msg["To"] = ", ".join(to)
-    msg.attach(MIMEText(html_safe, "html", "utf-8"))
+    msg = EmailMessage(policy=email.policy.SMTP)
+    msg["Subject"] = subject_safe
+    msg["From"] = f"Staffify <{gmail_user}>"
+    msg["To"] = ", ".join(a.strip() for a in to)
+    msg.set_content(html_safe, subtype="html", charset="us-ascii")
 
     def _send():
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
-            server.login(settings.GMAIL_USER, settings.GMAIL_APP_PASSWORD)
+            server.login(gmail_user, settings.GMAIL_APP_PASSWORD.strip())
             server.send_message(msg)
 
     try:
