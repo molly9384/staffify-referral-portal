@@ -27,6 +27,8 @@ async def send_email(to: list[str], subject: str, html: str) -> None:
     html_safe = html.encode("ascii", "xmlcharrefreplace").decode("ascii")
     subject_safe = subject.encode("ascii", "xmlcharrefreplace").decode("ascii")
     gmail_user = settings.GMAIL_USER.strip()
+    # App passwords may be copied with spaces/non-breaking spaces between groups — strip them all
+    gmail_password = "".join(settings.GMAIL_APP_PASSWORD.split())
 
     msg = EmailMessage(policy=email.policy.SMTP)
     msg["Subject"] = subject_safe
@@ -37,7 +39,7 @@ async def send_email(to: list[str], subject: str, html: str) -> None:
     def _send():
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
-            server.login(gmail_user, settings.GMAIL_APP_PASSWORD.strip())
+            server.login(gmail_user, gmail_password)
             server.send_message(msg)
 
     try:
