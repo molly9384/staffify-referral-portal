@@ -1,25 +1,44 @@
 import { useEffect, useState } from 'react'
-import { getPortalUsers, deletePortalUser } from '../../api/client'
+import { getPortalUsers, deletePortalUser, sendInvite, getClients } from '../../api/client'
 import apiClient from '../../api/client'
 import { formatDate } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
 
 const INTERNAL_ROLES = ['owner', 'admin', 'staff']
 
+const ROLE_OPTIONS_OWNER = [
+  { value: 'client', label: 'Client' },
+  { value: 'staff', label: 'Staff' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'owner', label: 'Owner' },
+]
+const ROLE_OPTIONS_ADMIN = [
+  { value: 'client', label: 'Client' },
+]
+
 export default function PortalUsers() {
   const { isOwner } = useAuth()
   const [users, setUsers] = useState([])
+  const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('clients') // 'clients' | 'internal' | 'archived'
   const [actionUserId, setActionUserId] = useState(null)
 
+  // Invite modal state
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', role: 'client', client_id: '' })
+  const [inviting, setInviting] = useState(false)
+  const [inviteSuccess, setInviteSuccess] = useState('')
+  const [inviteError, setInviteError] = useState('')
+
   const load = async () => {
     setLoading(true)
     try {
-      const data = await getPortalUsers()
+      const [data, cls] = await Promise.all([getPortalUsers(), getClients()])
       setUsers(data)
+      setClients(cls)
     } catch {
       setError('Failed to load portal users.')
     } finally {
@@ -28,6 +47,34 @@ export default function PortalUsers() {
   }
 
   useEffect(() => { load() }, [])
+
+  const openInvite = () => {
+    setInviteForm({ email: '', full_name: '', role: 'client', client_id: '' })
+    setInviteError('')
+    setInviteSuccess('')
+    setShowInvite(true)
+  }
+
+  const handleInvite = async (e) => {
+    e.preventDefault()
+    setInviting(true)
+    setInviteError('')
+    try {
+      const payload = {
+        email: inviteForm.email,
+        full_name: inviteForm.full_name || null,
+        role: inviteForm.role,
+        client_id: inviteForm.client_id || null,
+      }
+      await sendInvite(payload)
+      setInviteSuccess(`Invitation sent to ${inviteForm.email}!`)
+      setInviteForm({ email: '', full_name: '', role: 'client', client_id: '' })
+    } catch (err) {
+      setInviteError(err?.response?.data?.detail || 'Failed to send invite.')
+    } finally {
+      setInviting(false)
+    }
+  }
 
   const filtered = users.filter((u) => {
     const q = search.toLowerCase()
@@ -105,9 +152,17 @@ export default function PortalUsers() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Portal Users</h1>
-        <p className="text-gray-500 text-sm mt-1">Manage all portal accounts. Archive preserves all referral and credit data.</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Portal Users</h1>
+          <p className="text-gray-500 text-sm mt-1">Manage all portal accounts. Archive preserves all referral and credit data.</p>
+        </div>
+        <button onClick={openInvite} className="btn-primary">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          Invite User
+        </button>
       </div>
 
       {error && (
@@ -227,6 +282,98 @@ export default function PortalUsers() {
           </div>
         )}
       </div>
+      {/* Invite Modal */}
+      {showInvite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">Invite User</h2>
+              <button onClick={() => setShowInvite(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {inviteSuccess ? (
+              <div className="p-6 text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                  <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-sm font-medium text-gray-900">{inviteSuccess}</p>
+                <p className="text-xs text-gray-500">They'll receive an email with a link to set their password. The invite expires in 7 days.</p>
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => { setInviteSuccess(''); }} className="btn-secondary flex-1 justify-center">Send Another</button>
+                  <button onClick={() => setShowInvite(false)} className="btn-primary flex-1 justify-center">Done</button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleInvite} className="p-6 space-y-4">
+                <div>
+                  <label className="label">Email Address</label>
+                  <input
+                    type="email"
+                    className="input"
+                    required
+                    placeholder="name@example.com"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label">Full Name <span className="text-gray-400 font-normal">(optional — they can fill this in)</span></label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Jane Smith"
+                    value={inviteForm.full_name}
+                    onChange={(e) => setInviteForm((f) => ({ ...f, full_name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label">Role</label>
+                  <select
+                    className="input"
+                    required
+                    value={inviteForm.role}
+                    onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value, client_id: '' }))}
+                  >
+                    {(isOwner ? ROLE_OPTIONS_OWNER : ROLE_OPTIONS_ADMIN).map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {inviteForm.role === 'client' && (
+                  <div>
+                    <label className="label">Link to Client <span className="text-gray-400 font-normal">(optional)</span></label>
+                    <select
+                      className="input"
+                      value={inviteForm.client_id}
+                      onChange={(e) => setInviteForm((f) => ({ ...f, client_id: e.target.value }))}
+                    >
+                      <option value="">Select a client…</option>
+                      {clients.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {inviteError && <p className="text-sm text-red-600">{inviteError}</p>}
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowInvite(false)} className="btn-secondary flex-1 justify-center">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={inviting} className="btn-primary flex-1 justify-center">
+                    {inviting ? 'Sending…' : 'Send Invite'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

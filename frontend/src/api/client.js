@@ -64,6 +64,15 @@ export const archivePortalUser = (userId) =>
 export const restorePortalUser = (userId) =>
   apiClient.patch(`/auth/portal-users/${userId}/restore`).then((r) => r.data)
 
+export const sendInvite = (data) =>
+  apiClient.post('/auth/invite', data).then((r) => r.data)
+
+export const getInvite = (token) =>
+  apiClient.get(`/auth/invite/${token}`).then((r) => r.data)
+
+export const acceptInvite = (data) =>
+  apiClient.post('/auth/accept-invite', data).then((r) => r.data)
+
 export const resetPassword = (data) =>
   apiClient.post('/auth/reset-password', data).then((r) => r.data)
 

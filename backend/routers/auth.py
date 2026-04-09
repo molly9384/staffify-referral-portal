@@ -13,7 +13,7 @@ from auth import (
 from config import settings
 from database import get_db
 from models import User, UserRole
-from schemas import LoginRequest, Token, UserCreate, UserOut, ChangePasswordRequest, UpdateProfileRequest, ForgotPasswordRequest, ResetPasswordRequest, ClientRegisterRequest, PortalUserOut
+from schemas import LoginRequest, Token, UserCreate, UserOut, ChangePasswordRequest, UpdateProfileRequest, ForgotPasswordRequest, ResetPasswordRequest, ClientRegisterRequest, PortalUserOut, InviteCreate, AcceptInviteRequest
 
 router = APIRouter()
 
@@ -357,6 +357,129 @@ async def restore_portal_user(
     user.is_active = True
     await db.commit()
     return {"message": "User restored"}
+
+
+@router.post("/invite", status_code=status.HTTP_201_CREATED)
+async def create_invite(
+    invite_in: InviteCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Send an invite email. Admins can only invite clients; owners can invite any role."""
+    from datetime import timezone
+    from sqlalchemy import delete as sql_delete
+    from models import UserInvite
+
+    # Role permission check
+    if invite_in.role != UserRole.client and current_user.role != UserRole.owner:
+        raise HTTPException(status_code=403, detail="Only owners can invite admin or staff users")
+
+    # Block if account already exists
+    existing_user = await db.execute(select(User).where(User.email == invite_in.email))
+    if existing_user.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="An account already exists for that email")
+
+    # Delete any existing pending invite for this email so we don't pile up
+    await db.execute(
+        sql_delete(UserInvite).where(
+            UserInvite.email == invite_in.email,
+            UserInvite.accepted == False,
+        )
+    )
+
+    import secrets
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(days=7)
+
+    invite = UserInvite(
+        email=invite_in.email,
+        full_name=invite_in.full_name,
+        role=invite_in.role,
+        client_id=invite_in.client_id,
+        token=token,
+        invited_by_id=current_user.id,
+        expires_at=expires,
+    )
+    db.add(invite)
+    await db.commit()
+
+    invite_url = f"{settings.FRONTEND_URL}/#/accept-invite?token={token}"
+    try:
+        from services.email_service import send_email, email_invite
+        subject, html = email_invite(
+            invitee_name=invite_in.full_name or invite_in.email,
+            inviter_name=current_user.full_name,
+            role=invite_in.role.value,
+            invite_url=invite_url,
+        )
+        await send_email([invite_in.email], subject, html)
+    except Exception as e:
+        print(f"Invite email failed: {e}")
+
+    return {"message": f"Invitation sent to {invite_in.email}"}
+
+
+@router.get("/invite/{token}")
+async def get_invite(token: str, db: AsyncSession = Depends(get_db)):
+    """Return invite details so the accept page can prefill the form."""
+    from datetime import timezone
+    from models import UserInvite
+    result = await db.execute(
+        select(UserInvite).where(UserInvite.token == token, UserInvite.accepted == False)
+    )
+    invite = result.scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found or already used")
+    if invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="This invite has expired")
+    return {
+        "email": invite.email,
+        "full_name": invite.full_name,
+        "role": invite.role.value,
+    }
+
+
+@router.post("/accept-invite", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+async def accept_invite(
+    request: AcceptInviteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Accept an invite and create the user account."""
+    from datetime import timezone
+    from models import UserInvite
+
+    result = await db.execute(
+        select(UserInvite).where(UserInvite.token == request.token, UserInvite.accepted == False)
+    )
+    invite = result.scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=400, detail="Invalid or already used invite")
+    if invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="This invite has expired. Please ask for a new one.")
+    if len(request.full_name.strip()) < 1:
+        raise HTTPException(status_code=400, detail="Full name is required")
+    if len(request.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    existing = await db.execute(select(User).where(User.email == invite.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="An account already exists for that email")
+
+    new_user = User(
+        email=invite.email,
+        hashed_password=get_password_hash(request.password),
+        full_name=request.full_name.strip(),
+        role=invite.role,
+        client_id=invite.client_id,
+        is_active=True,
+    )
+    db.add(new_user)
+    invite.accepted = True
+    await db.flush()
+    await db.refresh(new_user)
+    await db.commit()
+
+    return new_user
 
 
 @router.get("/google")

@@ -22,6 +22,8 @@ export default function Login() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
+  const [invitedSuccess, setInvitedSuccess] = useState(searchParams.get('invited') === '1')
+
   // Handle Google OAuth callback params
   useEffect(() => {
     const googleToken = searchParams.get('google_token')
@@ -97,6 +99,12 @@ export default function Login() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
+          {invitedSuccess && (
+            <div className="mb-5 flex items-center gap-3 px-4 py-3 rounded-lg bg-green-50 border border-green-200">
+              <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <p className="text-sm text-green-700">Account created! Sign in with your new credentials.</p>
+            </div>
+          )}
           <h2 className="text-xl font-semibold text-gray-900 mb-1">Sign in to your account</h2>
           <p className="text-sm text-gray-500 mb-6">Enter your credentials to access the portal.</p>
 

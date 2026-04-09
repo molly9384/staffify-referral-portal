@@ -71,6 +71,21 @@ class UserOut(UserBase):
     model_config = {"from_attributes": True}
 
 
+# --- Invite Schemas ---
+
+class InviteCreate(BaseModel):
+    email: EmailStr
+    full_name: Optional[str] = None
+    role: UserRole = UserRole.client
+    client_id: Optional[uuid.UUID] = None
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    full_name: str
+    password: str
+
+
 # --- Client Schemas ---
 
 class ClientBase(BaseModel):

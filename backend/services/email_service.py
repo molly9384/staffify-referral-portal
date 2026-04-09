@@ -239,6 +239,29 @@ def email_pending_credits_statement(
     return subject, html
 
 
+def email_invite(
+    invitee_name: str,
+    inviter_name: str,
+    role: str,
+    invite_url: str,
+) -> tuple[str, str]:
+    role_display = role.title()
+    subject = "You're invited to join the Staffify Referral Portal"
+    html = _wrap(f"""
+      <h2 style="color:#111;font-size:20px;margin:0 0 12px;">You've been invited!</h2>
+      <p style="margin:0 0 12px;">Hi {invitee_name},</p>
+      <p style="margin:0 0 12px;"><strong>{inviter_name}</strong> has invited you to join the
+      <strong>Staffify Referral Portal</strong> as a <strong>{role_display}</strong>.</p>
+      <p style="margin:0 0 24px;">Click the button below to accept your invitation and set your password.
+      This link expires in <strong>7 days</strong>.</p>
+      {_btn("Accept Invitation", invite_url)}
+      <p style="margin:20px 0 0;font-size:12px;color:#aaa;">
+        If you weren't expecting this invitation, you can safely ignore this email.
+      </p>
+    """)
+    return subject, html
+
+
 def email_applied_credits_statement(
     referring_client_name: str,
     credits: list[dict],
