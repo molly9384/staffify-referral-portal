@@ -423,8 +423,7 @@ class CreditService:
                 apply_amount = min(credit.credit_amount, invoice_balance)
 
                 description = (
-                    f"Staffify Referral Credit - {credit.referral.referred_name} "
-                    f"({credit.period_start.strftime('%m/%d/%Y')} - {credit.period_end.strftime('%m/%d/%Y')})"
+                    f"Staffify Referral Credit - {credit.referral.referred_name}"
                     + (f" | Invoice #{credit.hubstaff_invoice_number}" if credit.hubstaff_invoice_number else "")
                 )
 
