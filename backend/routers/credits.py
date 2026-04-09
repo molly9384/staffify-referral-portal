@@ -86,6 +86,14 @@ async def get_credit_summary(
     )
     pending_row = pending_result.one()
 
+    eligible_result = await db.execute(
+        select(
+            func.coalesce(func.sum(CreditLedger.credit_amount), 0),
+            func.count(CreditLedger.id),
+        ).where(*base_filter, CreditLedger.status == CreditStatus.eligible)
+    )
+    eligible_row = eligible_result.one()
+
     applied_result = await db.execute(
         select(
             func.coalesce(func.sum(CreditLedger.credit_amount), 0),
@@ -102,9 +110,11 @@ async def get_credit_summary(
 
     return CreditSummary(
         total_pending=Decimal(str(pending_row[0])),
+        total_eligible=Decimal(str(eligible_row[0])),
         total_applied=Decimal(str(applied_row[0])),
         total_earned=Decimal(str(total_earned)),
         pending_count=pending_row[1],
+        eligible_count=eligible_row[1],
         applied_count=applied_row[1],
     )
 

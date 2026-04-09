@@ -208,11 +208,13 @@ class HubstaffService:
             url = data.get("pagination", {}).get("next_link")
         return all_projects
 
-    async def get_invoices(self, organization_id: str, project_id: Optional[str] = None, client_name: Optional[str] = None) -> list:
+    async def get_invoices(self, organization_id: str, project_id: Optional[str] = None, client_name: Optional[str] = None, include_all_statuses: bool = False) -> list:
         """
-        Fetch open/draft client invoices for the organization, matched by client_id.
-        Only returns invoices with status 'draft' or 'open'.
-        Line items are included via include_line_items=true (no separate detail endpoint exists).
+        Fetch client invoices for the organization, matched by client_id.
+        By default only returns non-paid/non-closed invoices (for credit generation).
+        Pass include_all_statuses=True to get every invoice regardless of status
+        (used when checking whether a pending invoice has since been paid).
+        Line items are included via include_line_items=true.
         """
         # Resolve client_id first
         hubstaff_client_id = None
@@ -245,19 +247,15 @@ class HubstaffService:
             url = data.get("pagination", {}).get("next_link")
 
         print(f"[DEBUG invoices] fetched {len(all_invoices)} total invoices")
-        unique_statuses = list({inv.get("status", "") for inv in all_invoices})
-        print(f"[DEBUG invoices] unique statuses: {unique_statuses}")
 
-        # Filter to non-closed status
-        matched = []
-        for inv in all_invoices:
-            status = (inv.get("status") or "").lower()
-            # Exclude only definitively closed/paid invoices
-            if status in ("closed", "paid", "cancelled", "canceled", "void", "voided"):
-                continue
-            matched.append(inv)
+        if include_all_statuses:
+            return all_invoices
 
-        print(f"[DEBUG invoices] {len(matched)} open/draft invoices matched for '{client_name}'")
+        # Filter to non-closed/non-paid status (for new credit generation)
+        closed_statuses = {"closed", "paid", "cancelled", "canceled", "void", "voided"}
+        matched = [inv for inv in all_invoices if (inv.get("status") or "").lower() not in closed_statuses]
+
+        print(f"[DEBUG invoices] {len(matched)} open/draft invoices for '{client_name}'")
         for inv in matched:
             print(f"[DEBUG invoice] id={inv.get('id')} status={inv.get('status')} number={inv.get('number')} line_items={inv.get('line_items', [])}")
 

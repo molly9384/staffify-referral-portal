@@ -6,6 +6,7 @@ import { formatDate, formatCurrency } from '../../utils/format'
 const STATUS_TABS = [
   { key: 'all', label: 'All Credits' },
   { key: 'pending', label: 'Pending' },
+  { key: 'eligible', label: 'Eligible' },
   { key: 'applied', label: 'Applied' },
   { key: 'voided', label: 'Voided' },
 ]
@@ -289,6 +290,7 @@ export default function Credits() {
                 {credits.map((credit) => {
                   const statusClass = {
                     pending: 'bg-amber-100 text-amber-700',
+                    eligible: 'bg-blue-100 text-blue-700',
                     applied: 'bg-green-100 text-green-700',
                     voided: 'bg-red-100 text-red-700',
                   }[credit.status]

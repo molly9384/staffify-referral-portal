@@ -305,10 +305,63 @@ class CreditService:
         await self.db.flush()
         return credit
 
+    async def promote_eligible_credits(self) -> int:
+        """
+        Check all pending credits and promote any whose Hubstaff invoice is now
+        paid or closed to 'eligible' status.  Eligible credits will be applied
+        to QBO invoices on the next billing cycle run.
+        """
+        from services.hubstaff_service import HubstaffService
+        hubstaff = HubstaffService()
+
+        result = await self.db.execute(
+            select(CreditLedger)
+            .where(
+                CreditLedger.status == CreditStatus.pending,
+                CreditLedger.hubstaff_invoice_id != None,
+            )
+            .options(
+                selectinload(CreditLedger.referral).selectinload(Referral.referred_client)
+            )
+        )
+        pending_credits = result.scalars().all()
+
+        # Group by referred client to minimize Hubstaff API calls
+        by_client: dict[str, list] = {}
+        for credit in pending_credits:
+            if credit.referral and credit.referral.referred_client:
+                name = credit.referral.referred_client.name
+                by_client.setdefault(name, []).append(credit)
+
+        promoted = 0
+        paid_statuses = {"paid", "closed", "approved"}
+
+        for client_name, credits in by_client.items():
+            try:
+                invoices = await hubstaff.get_invoices(
+                    organization_id=settings.HUBSTAFF_ORG_ID,
+                    client_name=client_name,
+                    include_all_statuses=True,
+                )
+                status_by_id = {str(inv.get("id", "")): (inv.get("status") or "").lower() for inv in invoices}
+            except Exception as e:
+                print(f"[DEBUG promote] error fetching invoices for '{client_name}': {e}")
+                continue
+
+            for credit in credits:
+                inv_status = status_by_id.get(str(credit.hubstaff_invoice_id), "")
+                if inv_status in paid_statuses:
+                    credit.status = CreditStatus.eligible
+                    promoted += 1
+                    print(f"[DEBUG promote] credit {credit.id} invoice {credit.hubstaff_invoice_id} status={inv_status} → eligible")
+
+        await self.db.flush()
+        return promoted
+
     async def apply_pending_credits_to_invoices(self) -> dict:
         """
-        Apply pending credits to QBO invoices for the referring client.
-        Only applies credits whose corresponding Hubstaff invoice is marked paid.
+        Apply eligible credits to QBO invoices for the referring client.
+        Only credits in 'eligible' status (Hubstaff invoice paid) are applied.
         Credits go to the referring client's oldest open QBO invoice.
         """
         from services.hubstaff_service import HubstaffService
@@ -322,7 +375,7 @@ class CreditService:
 
         result = await self.db.execute(
             select(CreditLedger)
-            .where(CreditLedger.status == CreditStatus.pending)
+            .where(CreditLedger.status == CreditStatus.eligible)
             .options(
                 selectinload(CreditLedger.referral).selectinload(Referral.referring_client),
                 selectinload(CreditLedger.va),

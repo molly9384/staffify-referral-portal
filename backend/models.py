@@ -34,8 +34,9 @@ class ReferralStatus(str, enum.Enum):
 
 
 class CreditStatus(str, enum.Enum):
-    pending = "pending"
-    applied = "applied"
+    pending = "pending"    # Waiting for Hubstaff invoice to be paid/closed
+    eligible = "eligible"  # Invoice paid — ready to apply next billing cycle
+    applied = "applied"    # Applied to referring client's QBO invoice
     voided = "voided"
 
 

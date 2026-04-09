@@ -225,9 +225,11 @@ class CreditLedgerOut(BaseModel):
 
 class CreditSummary(BaseModel):
     total_pending: Decimal
+    total_eligible: Decimal
     total_applied: Decimal
     total_earned: Decimal
     pending_count: int
+    eligible_count: int
     applied_count: int
 
 

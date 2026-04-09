@@ -42,7 +42,12 @@ async def run_biweekly_credit_job():
                 f"total_amount=${calc_result['total_amount']:.2f}"
             )
 
-            # Step 3: Apply pending credits to QBO invoices
+            # Step 3: Promote pending credits to eligible when Hubstaff invoice is paid
+            promoted = await service.promote_eligible_credits()
+            if promoted:
+                logger.info(f"Promoted {promoted} credit(s) to eligible status.")
+
+            # Step 4: Apply eligible credits to QBO invoices
             apply_result = await service.apply_pending_credits_to_invoices()
             logger.info(
                 f"Credit application complete: applied={apply_result['applied']}, "

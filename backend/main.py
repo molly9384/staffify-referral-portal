@@ -57,6 +57,12 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Add new enum values that create_all won't add to existing types
+    from sqlalchemy import text
+    async with engine.connect() as conn:
+        await conn.execute(text("ALTER TYPE creditstatus ADD VALUE IF NOT EXISTS 'eligible'"))
+        await conn.commit()
+
     # Create admin user if none exists
     await create_admin_user()
 
