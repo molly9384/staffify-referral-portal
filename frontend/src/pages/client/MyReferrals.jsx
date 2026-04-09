@@ -1,7 +1,25 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getReferrals } from '../../api/client'
-import { statusBadge, formatDate, formatCurrency } from '../../utils/format'
+import { formatDate, formatCurrency } from '../../utils/format'
+
+// Client-facing status map — hides internal pipeline stages
+const CLIENT_STATUS = {
+  referred:        { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  contacted:       { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  call_scheduled:  { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  contract_signed: { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  va_hired:        { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  va_billing:      { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  active:          { label: 'Active',      className: 'bg-green-100 text-green-700' },
+  paused:          { label: 'Paused',      className: 'bg-amber-100 text-amber-700' },
+  expired:         { label: 'Expired',     className: 'bg-red-100 text-red-700' },
+  ceased:          { label: 'Expired',     className: 'bg-red-100 text-red-700' },
+}
+
+function clientStatusBadge(status) {
+  return CLIENT_STATUS[status] || { label: 'In Progress', className: 'bg-blue-100 text-blue-700' }
+}
 
 export default function MyReferrals() {
   const [referrals, setReferrals] = useState([])
@@ -62,8 +80,7 @@ export default function MyReferrals() {
       ) : (
         <div className="space-y-4">
           {referrals.map((ref) => {
-            const badge = statusBadge(ref.status)
-            const eligibleVA = ref.virtual_assistants?.find((v) => v.is_eligible && v.is_active)
+            const badge = clientStatusBadge(ref.status)
             const daysSinceActivation = ref.activation_date
               ? Math.floor((Date.now() - new Date(ref.activation_date)) / 86400000)
               : null
@@ -76,7 +93,7 @@ export default function MyReferrals() {
                       <h3 className="text-base font-semibold text-gray-900">{ref.referred_name}</h3>
                       <span className={`badge ${badge.className}`}>{badge.label}</span>
                     </div>
-                    {ref.referred_email && <p className="text-sm text-gray-500">{ref.referred_email}</p>}
+                    <p className="text-xs text-gray-400">Referred {formatDate(ref.referral_date)}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-lg font-bold text-primary-600">{formatCurrency(ref.total_credits_earned)}</p>
@@ -84,40 +101,33 @@ export default function MyReferrals() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-gray-400 text-xs mb-0.5">Referral Date</p>
-                    <p className="font-medium text-gray-700">{formatDate(ref.referral_date)}</p>
+                    <p className="text-gray-400 text-xs mb-0.5">Credits Earned</p>
+                    <p className="font-medium text-gray-700">{formatCurrency(ref.total_credits_earned)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-400 text-xs mb-0.5">VA Assigned</p>
-                    <p className="font-medium text-gray-700">{eligibleVA ? eligibleVA.hubstaff_user_name : '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-xs mb-0.5">Credits Applied</p>
+                    <p className="text-gray-400 text-xs mb-0.5">Credits Paid Out</p>
                     <p className="font-medium text-gray-700">{formatCurrency(ref.total_credits_applied)}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-xs mb-0.5">Days in Window</p>
-                    <p className="font-medium text-gray-700">
-                      {daysSinceActivation !== null ? `${Math.min(daysSinceActivation, 365)} / 365` : '—'}
-                    </p>
                   </div>
                 </div>
 
-                {/* Simple progress bar for 12-month window */}
+                {/* 12-month earning window — only shown once referral is active */}
                 {ref.activation_date && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
                       <span>12-month earning window</span>
-                      <span>{Math.min(daysSinceActivation, 365)} days used</span>
+                      <span>{Math.min(daysSinceActivation, 365)} / 365 days</span>
                     </div>
                     <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-primary-500 rounded-full transition-all"
+                        className={`h-full rounded-full transition-all ${daysSinceActivation >= 365 ? 'bg-red-400' : 'bg-primary-500'}`}
                         style={{ width: `${Math.min((daysSinceActivation / 365) * 100, 100)}%` }}
                       />
                     </div>
+                    {daysSinceActivation >= 365 && (
+                      <p className="text-xs text-red-500 mt-1">Earning window closed</p>
+                    )}
                   </div>
                 )}
               </div>

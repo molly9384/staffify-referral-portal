@@ -3,7 +3,25 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { getReferrals, getCreditSummary } from '../../api/client'
 import StatCard from '../../components/StatCard'
-import { statusBadge, formatDate, formatCurrency } from '../../utils/format'
+import { formatDate, formatCurrency } from '../../utils/format'
+
+// Client-facing status map
+const CLIENT_STATUS = {
+  referred:        { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  contacted:       { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  call_scheduled:  { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  contract_signed: { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  va_hired:        { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  va_billing:      { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
+  active:          { label: 'Active',      className: 'bg-green-100 text-green-700' },
+  paused:          { label: 'Paused',      className: 'bg-amber-100 text-amber-700' },
+  expired:         { label: 'Expired',     className: 'bg-red-100 text-red-700' },
+  ceased:          { label: 'Expired',     className: 'bg-red-100 text-red-700' },
+}
+
+function clientStatusBadge(status) {
+  return CLIENT_STATUS[status] || { label: 'In Progress', className: 'bg-blue-100 text-blue-700' }
+}
 
 export default function ClientDashboard() {
   const { user } = useAuth()
@@ -80,7 +98,7 @@ export default function ClientDashboard() {
         />
         <StatCard
           label="Credits Pending"
-          value={summary ? formatCurrency(summary.total_pending) : null}
+          value={summary ? formatCurrency(Number(summary.total_pending) + Number(summary.total_eligible ?? 0)) : null}
           loading={loading}
           color="amber"
           icon={
@@ -130,7 +148,7 @@ export default function ClientDashboard() {
         ) : (
           <div className="divide-y divide-gray-50">
             {recentReferrals.map((ref) => {
-              const badge = statusBadge(ref.status)
+              const badge = clientStatusBadge(ref.status)
               return (
                 <div key={ref.id} className="px-6 py-4 flex items-center justify-between gap-4">
                   <div>

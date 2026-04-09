@@ -20,7 +20,7 @@ import ClientLayout from './components/ClientLayout'
 import ClientDashboard from './pages/client/ClientDashboard'
 import MyReferrals from './pages/client/MyReferrals'
 import NewReferral from './pages/client/NewReferral'
-import MyCredits from './pages/portal/MyCredits'
+import MyCredits from './pages/client/MyCredits'
 
 function RootRedirect() {
   const { user, loading } = useAuth()
