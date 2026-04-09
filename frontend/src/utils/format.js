@@ -23,11 +23,11 @@ export const STATUS_CONFIG = {
   call_scheduled:  { label: 'Call Scheduled',    className: 'bg-indigo-100 text-indigo-700' },
   contract_signed: { label: 'Contract Signed',   className: 'bg-purple-100 text-purple-700' },
   va_hired:        { label: 'VA Hired',          className: 'bg-yellow-100 text-yellow-700' },
-  va_billing:      { label: 'VA Billing',        className: 'bg-orange-100 text-orange-700' },
+  va_billing:      { label: 'Active',            className: 'bg-green-100 text-green-700' },
   active:          { label: 'Active',            className: 'bg-green-100 text-green-700' },
   paused:          { label: 'Paused',            className: 'bg-amber-100 text-amber-700' },
   expired:         { label: 'Expired',           className: 'bg-red-100 text-red-700' },
-  ceased:          { label: 'Ceased',            className: 'bg-red-100 text-red-700' },
+  ceased:          { label: 'Expired',           className: 'bg-red-100 text-red-700' },
 }
 
 export function statusBadge(status) {
@@ -36,7 +36,8 @@ export function statusBadge(status) {
 
 export const ALL_STATUSES = Object.keys(STATUS_CONFIG)
 
+// Status options shown in the admin status picker (active & ceased removed)
 export const PIPELINE_STATUSES = [
   'referred', 'contacted', 'call_scheduled', 'contract_signed',
-  'va_hired', 'va_billing', 'active', 'paused', 'expired', 'ceased',
+  'va_hired', 'va_billing', 'paused', 'expired',
 ]

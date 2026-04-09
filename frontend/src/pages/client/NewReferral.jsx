@@ -9,6 +9,7 @@ export default function NewReferral() {
   const [form, setForm] = useState({
     referred_name: '',
     referred_company: '',
+    referred_email: '',
     referred_phone: '',
     referred_website: '',
     pipeline_notes: '',
@@ -31,6 +32,7 @@ export default function NewReferral() {
         referring_client_id: user.client_id,
         referred_name: form.referred_name,
         referred_company: form.referred_company,
+        referred_email: form.referred_email || null,
         referred_phone: form.referred_phone,
         referred_website: form.referred_website || null,
         pipeline_notes: form.pipeline_notes || null,
@@ -81,6 +83,10 @@ export default function NewReferral() {
                 <span className="text-gray-400 font-normal ml-1">(write N/A if unknown)</span>
               </label>
               <input type="text" className="input" required placeholder="Acme Corp or N/A" value={form.referred_company} onChange={set('referred_company')} />
+            </div>
+            <div>
+              <label className="label">Email Address <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input type="email" className="input" placeholder="contact@example.com" value={form.referred_email} onChange={set('referred_email')} />
             </div>
             <div>
               <label className="label">Phone Number <span className="text-red-500">*</span></label>

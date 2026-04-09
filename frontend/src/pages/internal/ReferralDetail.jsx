@@ -23,7 +23,7 @@ export default function ReferralDetail() {
   const [showTerminateModal, setShowTerminateModal] = useState(false)
   const [selectedVA, setSelectedVA] = useState(null)
 
-  const [editForm, setEditForm] = useState({ referred_name: '', referred_email: '', referral_date: '' })
+  const [editForm, setEditForm] = useState({ referred_name: '', referred_company: '', referred_email: '', referred_phone: '', referred_website: '', referral_date: '' })
   const [editError, setEditError] = useState('')
 
   const [statusForm, setStatusForm] = useState({ status: '', notes: '', activation_date: '' })
@@ -53,7 +53,10 @@ export default function ReferralDetail() {
   const openEditModal = () => {
     setEditForm({
       referred_name: referral.referred_name || '',
+      referred_company: referral.referred_company || '',
       referred_email: referral.referred_email || '',
+      referred_phone: referral.referred_phone || '',
+      referred_website: referral.referred_website || '',
       referral_date: referral.referral_date || '',
     })
     setEditError('')
@@ -67,7 +70,10 @@ export default function ReferralDetail() {
     try {
       await updateReferral(id, {
         referred_name: editForm.referred_name || undefined,
+        referred_company: editForm.referred_company || null,
         referred_email: editForm.referred_email || null,
+        referred_phone: editForm.referred_phone || null,
+        referred_website: editForm.referred_website || null,
         referral_date: editForm.referral_date || undefined,
       })
       await load()
@@ -91,7 +97,7 @@ export default function ReferralDetail() {
       await updateReferralStatus(id, payload)
       await load()
       setShowStatusModal(false)
-      // Auto-prompt Add VA modal when moving to VA Billing
+      // Auto-prompt Add VA modal when moving to Active
       if (payload.status === 'va_billing') {
         const updated = await getReferral(id)
         setTimeout(() => openAddVAModal(updated), 300)
@@ -257,6 +263,46 @@ export default function ReferralDetail() {
         <PipelineStage status={referral.status} />
       </div>
 
+      {/* Contact Details */}
+      <div className="card card-body">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">Contact Details</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+          {referral.referred_company && (
+            <div>
+              <p className="text-xs text-gray-400">Company</p>
+              <p className="text-gray-800 font-medium">{referral.referred_company}</p>
+            </div>
+          )}
+          {referral.referred_email && (
+            <div>
+              <p className="text-xs text-gray-400">Email</p>
+              <a href={`mailto:${referral.referred_email}`} className="text-primary-600 hover:underline font-medium">{referral.referred_email}</a>
+            </div>
+          )}
+          {referral.referred_phone && (
+            <div>
+              <p className="text-xs text-gray-400">Phone</p>
+              <a href={`tel:${referral.referred_phone}`} className="text-gray-800 font-medium hover:text-primary-600">{referral.referred_phone}</a>
+            </div>
+          )}
+          {referral.referred_website && (
+            <div>
+              <p className="text-xs text-gray-400">Website</p>
+              <a href={referral.referred_website.startsWith('http') ? referral.referred_website : `https://${referral.referred_website}`} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline font-medium">{referral.referred_website}</a>
+            </div>
+          )}
+          {!referral.referred_company && !referral.referred_email && !referral.referred_phone && !referral.referred_website && (
+            <p className="text-gray-400 italic text-sm col-span-3">No contact details provided.</p>
+          )}
+        </div>
+        {referral.pipeline_notes && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-400 mb-1">Notes from referring client</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{referral.pipeline_notes}</p>
+          </div>
+        )}
+      </div>
+
       {/* Client Info Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="card card-body space-y-3">
@@ -282,7 +328,7 @@ export default function ReferralDetail() {
               <p className="text-base font-medium text-gray-900">{referral.referred_client.name}</p>
               {referral.referred_client.email && <p className="text-sm text-gray-500">{referral.referred_client.email}</p>}
             </>
-          ) : ['contract_signed','va_hired','va_billing','active','paused','expired','ceased'].includes(referral.status) ? (
+          ) : ['contract_signed','va_hired','va_billing','active','paused','expired'].includes(referral.status) ? (
             <>
               <p className="text-base font-medium text-gray-900">{referral.referred_name}</p>
               <p className="text-xs text-gray-400 italic">Hubstaff profile created at VA Billing</p>
@@ -409,13 +455,6 @@ export default function ReferralDetail() {
         )}
       </div>
 
-      {/* Notes */}
-      {referral.pipeline_notes && (
-        <div className="card card-body">
-          <h2 className="text-sm font-semibold text-gray-700 mb-2">Pipeline Notes</h2>
-          <p className="text-sm text-gray-600 whitespace-pre-wrap">{referral.pipeline_notes}</p>
-        </div>
-      )}
 
       {/* Edit Referral Modal */}
       {showEditModal && (
@@ -430,35 +469,31 @@ export default function ReferralDetail() {
               </button>
             </div>
             <form onSubmit={handleEditSave} className="p-6 space-y-4">
-              <div>
-                <label className="label">Referred Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  required
-                  value={editForm.referred_name}
-                  onChange={(e) => setEditForm((f) => ({ ...f, referred_name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label">Referred Email <span className="text-gray-400 font-normal">(optional)</span></label>
-                <input
-                  type="email"
-                  className="input"
-                  placeholder="email@example.com"
-                  value={editForm.referred_email}
-                  onChange={(e) => setEditForm((f) => ({ ...f, referred_email: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label">Referral Date</label>
-                <input
-                  type="date"
-                  className="input"
-                  required
-                  value={editForm.referral_date}
-                  onChange={(e) => setEditForm((f) => ({ ...f, referral_date: e.target.value }))}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Contact Name</label>
+                  <input type="text" className="input" required value={editForm.referred_name} onChange={(e) => setEditForm((f) => ({ ...f, referred_name: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Company</label>
+                  <input type="text" className="input" placeholder="Acme Corp or N/A" value={editForm.referred_company} onChange={(e) => setEditForm((f) => ({ ...f, referred_company: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Email <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <input type="email" className="input" placeholder="email@example.com" value={editForm.referred_email} onChange={(e) => setEditForm((f) => ({ ...f, referred_email: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Phone <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <input type="tel" className="input" placeholder="(555) 000-0000" value={editForm.referred_phone} onChange={(e) => setEditForm((f) => ({ ...f, referred_phone: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Website <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <input type="text" className="input" placeholder="example.com" value={editForm.referred_website} onChange={(e) => setEditForm((f) => ({ ...f, referred_website: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Referral Date</label>
+                  <input type="date" className="input" required value={editForm.referral_date} onChange={(e) => setEditForm((f) => ({ ...f, referral_date: e.target.value }))} />
+                </div>
               </div>
               {editError && (
                 <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{editError}</div>
@@ -497,7 +532,7 @@ export default function ReferralDetail() {
                   ))}
                 </select>
               </div>
-              {['va_billing','active'].includes(statusForm.status) && (
+              {statusForm.status === 'va_billing' && (
                 <div>
                   <label className="label">
                     Activation Date

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from auth import get_current_active_user, require_admin
+from config import settings
 from database import get_db
 from models import Referral, CreditLedger, User, UserRole, ReferralStatus
 from schemas import (
@@ -15,6 +16,57 @@ from schemas import (
 )
 
 router = APIRouter()
+
+
+async def _send_new_referral_notifications(referral: Referral, referring_client_name: str):
+    import httpx
+
+    referred = referral.referred_name or "Unknown"
+    referrer = referring_client_name
+    ref_date = referral.referral_date.strftime("%B %-d, %Y") if referral.referral_date else "—"
+
+    # Slack
+    if settings.SLACK_WEBHOOK_URL:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    settings.SLACK_WEBHOOK_URL,
+                    json={
+                        "text": f":tada: *New Referral Submitted*\n*Referred:* {referred}\n*From:* {referrer}\n*Date:* {ref_date}"
+                    },
+                    timeout=10,
+                )
+        except Exception as e:
+            print(f"Slack notification failed: {e}")
+
+    # Email via Resend
+    if settings.RESEND_API_KEY and settings.ADMIN_EMAIL:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "https://api.resend.com/emails",
+                    headers={
+                        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "from": "Staffify Referral Portal <noreply@gostaffify.com>",
+                        "to": [settings.ADMIN_EMAIL],
+                        "subject": f"New Referral: {referred}",
+                        "html": (
+                            f"<p>A new referral has been submitted.</p>"
+                            f"<ul>"
+                            f"<li><strong>Referred:</strong> {referred}</li>"
+                            f"<li><strong>From:</strong> {referrer}</li>"
+                            f"<li><strong>Date:</strong> {ref_date}</li>"
+                            f"</ul>"
+                            f"<p><a href='{settings.FRONTEND_URL}'>View in Portal</a></p>"
+                        ),
+                    },
+                    timeout=10,
+                )
+        except Exception as e:
+            print(f"Email notification failed: {e}")
 
 
 @router.get("", response_model=List[ReferralOut])
@@ -80,7 +132,14 @@ async def create_referral(
             selectinload(Referral.virtual_assistants),
         )
     )
-    return result.scalar_one()
+    created = result.scalar_one()
+
+    # Fire-and-forget notifications (don't block response)
+    import asyncio
+    referring_client_name = created.referring_client.name if created.referring_client else "Unknown"
+    asyncio.create_task(_send_new_referral_notifications(created, referring_client_name))
+
+    return created
 
 
 @router.get("/{referral_id}", response_model=ReferralOut)

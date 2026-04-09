@@ -1,5 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useEffect, useState } from 'react'
+import { getReferrals } from '../api/client'
 
 const navItems = [
   {
@@ -62,6 +64,13 @@ const navItems = [
 export default function InternalLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [newReferralsCount, setNewReferralsCount] = useState(0)
+
+  useEffect(() => {
+    getReferrals({ status: 'referred' })
+      .then((refs) => setNewReferralsCount(refs.length))
+      .catch(() => {})
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -95,7 +104,12 @@ export default function InternalLayout() {
               }
             >
               {item.icon}
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.to === '/internal/referrals' && newReferralsCount > 0 && (
+                <span className="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary-600 text-white text-xs font-semibold">
+                  {newReferralsCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

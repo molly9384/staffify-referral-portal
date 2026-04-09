@@ -10,7 +10,7 @@ const STATUS_TABS = [
   { key: 'call_scheduled', label: 'Call Sched.' },
   { key: 'contract_signed', label: 'Signed' },
   { key: 'va_hired', label: 'VA Hired' },
-  { key: 'active', label: 'Active' },
+  { key: 'va_billing', label: 'Active' },
   { key: 'paused', label: 'Paused' },
   { key: 'expired', label: 'Expired' },
 ]

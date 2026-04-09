@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    SLACK_WEBHOOK_URL: str = ""
+    RESEND_API_KEY: str = ""
+    ADMIN_EMAIL: str = ""
+
     BASE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:5173"
 
