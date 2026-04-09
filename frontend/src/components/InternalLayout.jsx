@@ -82,11 +82,20 @@ export default function InternalLayout() {
       .catch(() => {})
   }, [location.pathname])
 
-  // When on the referrals page, mark all current referred IDs as seen
+  // Mark referrals as seen based on which page the user is on
   useEffect(() => {
-    if (location.pathname.startsWith('/internal/referrals') && referredIds.length > 0) {
+    if (referredIds.length === 0) return
+    if (location.pathname === '/internal/referrals') {
+      // List page: mark all as seen
       markReferralsAsSeen(referredIds)
       setNewReferralsCount(0)
+    } else if (location.pathname.startsWith('/internal/referrals/')) {
+      // Detail page: mark just this one as seen, deduct 1
+      const idFromPath = location.pathname.replace('/internal/referrals/', '')
+      if (idFromPath && referredIds.includes(idFromPath)) {
+        markReferralsAsSeen([idFromPath])
+        setNewReferralsCount((prev) => Math.max(0, prev - 1))
+      }
     }
   }, [location.pathname, referredIds])
 

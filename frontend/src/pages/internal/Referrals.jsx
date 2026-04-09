@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getReferrals, getClients, createReferral, archiveReferral, restoreReferral, deleteReferral } from '../../api/client'
 import { statusBadge, formatDate, formatCurrency } from '../../utils/format'
-import { getSeenReferralIds } from '../../utils/storage'
+import { getSeenReferralIds, markReferralsAsSeen } from '../../utils/storage'
 
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
@@ -17,6 +17,11 @@ const STATUS_TABS = [
 ]
 
 export default function Referrals() {
+  // Snapshot which IDs were unseen when this page loaded, before InternalLayout marks them all seen
+  const [unseenOnArrival] = useState(() => {
+    const seen = getSeenReferralIds()
+    return (id) => !seen.has(id)
+  })
   const [referrals, setReferrals] = useState([])
   const [clients, setClients] = useState([])
   const [viewArchived, setViewArchived] = useState(false)
@@ -191,7 +196,7 @@ export default function Referrals() {
                 {referrals.map((ref) => {
                   const badge = statusBadge(ref.status)
                   const busy = actionLoading === ref.id
-                  const isNew = ref.status === 'referred' && !getSeenReferralIds().has(ref.id)
+                  const isNew = ref.status === 'referred' && unseenOnArrival(ref.id)
                   return (
                     <tr key={ref.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-3.5">

@@ -22,9 +22,16 @@ async def send_email(to: list[str], subject: str, html: str) -> None:
     if not to:
         return
 
-    # Sanitize everything to pure ASCII (non-ASCII chars become HTML entities)
+    # Replace common Unicode with ASCII equivalents in subject (HTML entities look terrible there)
+    _subst = {'\u2014': '-', '\u2013': '-', '\u2019': "'", '\u2018': "'",
+              '\u201c': '"', '\u201d': '"', '\u2026': '...', '\xa0': ' '}
+    subject_clean = subject
+    for ch, rep in _subst.items():
+        subject_clean = subject_clean.replace(ch, rep)
+    subject_safe = subject_clean.encode("ascii", "ignore").decode("ascii")
+
+    # HTML body: convert non-ASCII to HTML entities (renders fine in email clients)
     html_safe = html.encode("ascii", "xmlcharrefreplace").decode("ascii")
-    subject_safe = subject.encode("ascii", "xmlcharrefreplace").decode("ascii")
     gmail_user = settings.GMAIL_USER.strip()
     # App passwords may be copied with spaces/non-breaking spaces between groups — strip them all
     gmail_password = "".join(settings.GMAIL_APP_PASSWORD.split())
