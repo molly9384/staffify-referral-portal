@@ -245,7 +245,8 @@ def email_invite(
     role: str,
     invite_url: str,
 ) -> tuple[str, str]:
-    role_display = role.title()
+    role_labels = {"owner": "Owner", "admin": "Admin", "staff": "Staff Member", "client": "Client"}
+    role_display = role_labels.get(role.lower(), role.title())
     article = "an" if role.lower() in ("owner", "admin") else "a"
     subject = "You're invited to join the Staffify Referral Portal"
     html = _wrap(f"""
