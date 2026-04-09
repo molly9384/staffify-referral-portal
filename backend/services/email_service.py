@@ -33,7 +33,7 @@ async def send_email(to: list[str], subject: str, html: str) -> None:
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
             server.login(settings.GMAIL_USER, settings.GMAIL_APP_PASSWORD)
-            server.sendmail(settings.GMAIL_USER, to, msg.as_string())
+            server.send_message(msg)
 
     try:
         await asyncio.to_thread(_send)
@@ -63,7 +63,7 @@ def _wrap(body: str) -> str:
       <img src="{LOGO_URL}" alt="Staffify" style="height:36px;margin-bottom:28px;" />
       {body}
       <hr style="border:none;border-top:1px solid #eee;margin:32px 0 16px;" />
-      <p style="color:#aaa;font-size:12px;margin:0;">Staffify LLC · Referral Portal<br/>
+      <p style="color:#aaa;font-size:12px;margin:0;">Staffify LLC &middot; Referral Portal<br/>
       Questions? Reply to this email or visit <a href="{settings.FRONTEND_URL}" style="color:{BRAND_COLOR};">the portal</a>.</p>
     </div>
     """
