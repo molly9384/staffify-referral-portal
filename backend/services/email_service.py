@@ -27,7 +27,7 @@ async def send_email(to: list[str], subject: str, html: str) -> None:
     msg["Subject"] = subject
     msg["From"] = f"Staffify <{settings.GMAIL_USER}>"
     msg["To"] = ", ".join(to)
-    msg.attach(MIMEText(html, "html"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
 
     def _send():
         with smtplib.SMTP("smtp.gmail.com", 587) as server:

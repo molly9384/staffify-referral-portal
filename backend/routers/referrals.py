@@ -62,7 +62,7 @@ async def _send_new_referral_notifications(referral: Referral, referring_client_
                 f"</ul>"
                 f"<p><a href='{settings.FRONTEND_URL}'>View in Portal</a></p>"
             )
-            msg.attach(MIMEText(html_body, "html"))
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
 
             def send_email():
                 with smtplib.SMTP("smtp.gmail.com", 587) as server:
