@@ -137,7 +137,7 @@ async def create_referral(
         if existing_referral.scalar_one_or_none():
             raise HTTPException(
                 status_code=400,
-                detail=f"A referral for \"{referral_in.referred_name}\" already exists in the portal."
+                detail=f"It looks like {referral_in.referred_name} has already been submitted as a referral! If you think this might be a mistake, feel free to reach out to us at hello@gostaffify.com or message us in your client portal."
             )
 
         existing_client = await db.execute(
@@ -149,7 +149,7 @@ async def create_referral(
         if existing_client.scalar_one_or_none():
             raise HTTPException(
                 status_code=400,
-                detail=f"\"{referral_in.referred_name}\" is already an existing Staffify client and is not eligible for referral."
+                detail=f"Great minds think alike! {referral_in.referred_name} is already part of the Staffify family, so they don't qualify for the referral program. Have another contact in mind? We'd love the intro!"
             )
 
     from datetime import date as date_type

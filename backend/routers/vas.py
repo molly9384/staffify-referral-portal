@@ -5,6 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 
 from auth import get_current_active_user, require_admin
 from database import get_db
@@ -142,10 +143,28 @@ async def terminate_va(
             open_period.pause_reason = terminate_data.pause_reason
 
         # Update referral status to paused
-        referral_result = await db.execute(select(Referral).where(Referral.id == va.referral_id))
+        referral_result = await db.execute(
+            select(Referral)
+            .where(Referral.id == va.referral_id)
+            .options(selectinload(Referral.referring_client))
+        )
         referral = referral_result.scalar_one_or_none()
         if referral:
             referral.status = "paused"
+
+            # Send paused email to referring client
+            try:
+                import asyncio
+                from services.email_service import send_email, get_client_emails, email_referral_paused
+                client_emails = await get_client_emails(db, referral.referring_client_id)
+                if client_emails:
+                    client_name = referral.referring_client.name if referral.referring_client else ""
+                    referred = referral.referred_name or "your contact"
+                    reason = terminate_data.pause_reason or ""
+                    subject, html = email_referral_paused(client_name, referred, reason)
+                    asyncio.create_task(send_email(client_emails, subject, html))
+            except Exception as e:
+                print(f"Paused email on VA terminate failed: {e}")
 
     await db.flush()
     await db.refresh(va)
