@@ -88,7 +88,7 @@ export default function NewReferral() {
             </div>
             <div>
               <label className="label">Company Website <span className="text-gray-400 font-normal">(optional)</span></label>
-              <input type="url" className="input" placeholder="https://example.com" value={form.referred_website} onChange={set('referred_website')} />
+              <input type="text" className="input" placeholder="example.com" value={form.referred_website} onChange={set('referred_website')} />
             </div>
           </div>
 
