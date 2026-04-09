@@ -4,13 +4,15 @@ import apiClient from '../../api/client'
 import { formatDate } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
 
+const INTERNAL_ROLES = ['owner', 'admin', 'staff']
+
 export default function PortalUsers() {
   const { isOwner } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState('active') // 'active' | 'archived'
+  const [tab, setTab] = useState('clients') // 'clients' | 'internal' | 'archived'
   const [actionUserId, setActionUserId] = useState(null)
 
   const load = async () => {
@@ -28,10 +30,17 @@ export default function PortalUsers() {
   useEffect(() => { load() }, [])
 
   const filtered = users.filter((u) => {
-    const matchesTab = tab === 'active' ? u.is_active : !u.is_active
     const q = search.toLowerCase()
-    const matchesSearch = !q || u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.client_name || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q)
-    return matchesTab && matchesSearch
+    const matchesSearch = !q
+      || u.full_name.toLowerCase().includes(q)
+      || u.email.toLowerCase().includes(q)
+      || (u.client_name || '').toLowerCase().includes(q)
+      || (u.role || '').toLowerCase().includes(q)
+
+    if (tab === 'clients') return u.is_active && u.role === 'client' && matchesSearch
+    if (tab === 'internal') return u.is_active && INTERNAL_ROLES.includes(u.role) && matchesSearch
+    if (tab === 'archived') return !u.is_active && matchesSearch
+    return false
   })
 
   const handleArchive = async (userId) => {
@@ -71,8 +80,28 @@ export default function PortalUsers() {
     }
   }
 
-  const activeCount = users.filter((u) => u.is_active).length
+  const clientCount = users.filter((u) => u.is_active && u.role === 'client').length
+  const internalCount = users.filter((u) => u.is_active && INTERNAL_ROLES.includes(u.role)).length
   const archivedCount = users.filter((u) => !u.is_active).length
+
+  const roleBadgeClass = (role) => ({
+    owner: 'bg-purple-100 text-purple-700',
+    admin: 'bg-blue-100 text-blue-700',
+    staff: 'bg-gray-100 text-gray-600',
+    client: 'bg-green-100 text-green-700',
+  }[role] || 'bg-gray-100 text-gray-500')
+
+  const tabs = [
+    { key: 'clients', label: 'Clients', count: clientCount },
+    { key: 'internal', label: 'Internal Users', count: internalCount },
+    { key: 'archived', label: 'Archived', count: archivedCount },
+  ]
+
+  const emptyMessages = {
+    clients: 'No active client accounts.',
+    internal: 'No internal users yet.',
+    archived: 'No archived users.',
+  }
 
   return (
     <div className="p-8">
@@ -93,7 +122,7 @@ export default function PortalUsers() {
         <input
           type="text"
           className="input pl-9"
-          placeholder="Search by name, email, or company…"
+          placeholder="Search by name, email, company, or role…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -101,10 +130,7 @@ export default function PortalUsers() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-5 border-b border-gray-200">
-        {[
-          { key: 'active', label: 'Active', count: activeCount },
-          { key: 'archived', label: 'Archived', count: archivedCount },
-        ].map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
@@ -130,7 +156,7 @@ export default function PortalUsers() {
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <p className="text-sm text-gray-400">
-              {search ? 'No users match your search.' : tab === 'active' ? 'No active portal users.' : 'No archived users.'}
+              {search ? 'No users match your search.' : emptyMessages[tab]}
             </p>
           </div>
         ) : (
@@ -140,64 +166,62 @@ export default function PortalUsers() {
                 <tr className="border-b border-gray-100">
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Name</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Email</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Client</th>
+                  {tab === 'clients' && (
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Client</th>
+                  )}
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Role</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Joined</th>
                   <th className="px-6 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((u) => {
-                  const roleBadge = {
-                    owner: 'bg-purple-100 text-purple-700',
-                    admin: 'bg-blue-100 text-blue-700',
-                    staff: 'bg-gray-100 text-gray-600',
-                    client: 'bg-green-100 text-green-700',
-                  }[u.role] || 'bg-gray-100 text-gray-500'
-                  return (
+                {filtered.map((u) => (
                   <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-3.5 font-medium text-gray-900">{u.full_name}</td>
                     <td className="px-6 py-3.5 text-gray-600">{u.email}</td>
-                    <td className="px-6 py-3.5 text-gray-500">{u.client_name || '—'}</td>
+                    {tab === 'clients' && (
+                      <td className="px-6 py-3.5 text-gray-500">{u.client_name || '—'}</td>
+                    )}
                     <td className="px-6 py-3.5">
-                      <span className={`badge capitalize ${roleBadge}`}>{u.role}</span>
+                      <span className={`badge capitalize ${roleBadgeClass(u.role)}`}>{u.role}</span>
                     </td>
                     <td className="px-6 py-3.5 text-gray-400 text-xs">{formatDate(u.created_at)}</td>
-                    <td className="px-6 py-3.5 text-right flex items-center justify-end gap-4">
-                      {tab === 'active' ? (
-                        isOwner && (
-                          <button
-                            onClick={() => handleArchive(u.id)}
-                            disabled={actionUserId === u.id}
-                            className="text-amber-600 hover:text-amber-700 font-medium text-sm disabled:opacity-40"
-                          >
-                            {actionUserId === u.id ? 'Archiving…' : 'Archive'}
-                          </button>
-                        )
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => handleRestore(u.id)}
-                            disabled={actionUserId === u.id}
-                            className="text-primary-600 hover:text-primary-700 font-medium text-sm disabled:opacity-40"
-                          >
-                            {actionUserId === u.id ? 'Restoring…' : 'Restore'}
-                          </button>
-                          {isOwner && (
+                    <td className="px-6 py-3.5 text-right">
+                      <div className="flex items-center justify-end gap-4">
+                        {tab === 'archived' ? (
+                          <>
                             <button
-                              onClick={() => handleDelete(u.id)}
+                              onClick={() => handleRestore(u.id)}
                               disabled={actionUserId === u.id}
-                              className="text-red-500 hover:text-red-700 font-medium text-sm disabled:opacity-40"
+                              className="text-primary-600 hover:text-primary-700 font-medium text-sm disabled:opacity-40"
                             >
-                              Delete
+                              {actionUserId === u.id ? 'Restoring…' : 'Restore'}
                             </button>
-                          )}
-                        </>
-                      )}
+                            {isOwner && (
+                              <button
+                                onClick={() => handleDelete(u.id)}
+                                disabled={actionUserId === u.id}
+                                className="text-red-500 hover:text-red-700 font-medium text-sm disabled:opacity-40"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          isOwner && (
+                            <button
+                              onClick={() => handleArchive(u.id)}
+                              disabled={actionUserId === u.id}
+                              className="text-amber-600 hover:text-amber-700 font-medium text-sm disabled:opacity-40"
+                            >
+                              {actionUserId === u.id ? 'Archiving…' : 'Archive'}
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
-                  )
-                })}
+                ))}
               </tbody>
             </table>
           </div>
