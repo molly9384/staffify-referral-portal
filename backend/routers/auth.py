@@ -134,6 +134,24 @@ async def setup_admin(setup_key: str, db: AsyncSession = Depends(get_db)):
         return {"message": "Admin user created with password ChangeMe123!"}
 
 
+@router.post("/promote-owner")
+async def promote_owner(setup_key: str, email: str, db: AsyncSession = Depends(get_db)):
+    """One-time endpoint to promote a user to owner role. Requires ADMIN_SETUP_KEY env var."""
+    expected_key = os.environ.get("ADMIN_SETUP_KEY", "")
+    if not expected_key or setup_key != expected_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail=f"No user found with email: {email}")
+
+    user.role = UserRole.owner
+    user.is_active = True
+    await db.commit()
+    return {"message": f"{user.full_name} ({user.email}) has been promoted to owner."}
+
+
 @router.put("/update-profile")
 async def update_profile(
     request: UpdateProfileRequest,
