@@ -71,7 +71,7 @@ export default function Register() {
 
           {/* Google Sign-Up */}
           <a
-            href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/auth/google`}
+            href={`${import.meta.env.VITE_API_BASE_URL}/auth/google`}
             className="w-full mb-5 flex items-center justify-center gap-3 px-4 py-2.5 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
