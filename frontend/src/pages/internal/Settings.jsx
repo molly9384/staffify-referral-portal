@@ -196,10 +196,15 @@ export default function Settings() {
               {hubstaffChecking ? (
                 <span className="text-xs text-gray-400">Checking…</span>
               ) : hubstaffConnected ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                  Connected
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    Connected
+                  </span>
+                  <a href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/hubstaff/connect`} className="text-xs text-gray-400 hover:text-gray-600 underline">
+                    Reconnect
+                  </a>
+                </div>
               ) : (
                 <a href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/hubstaff/connect`} className="btn-primary text-xs">
                   Connect Hubstaff
@@ -218,10 +223,15 @@ export default function Settings() {
               {qboChecking ? (
                 <span className="text-xs text-gray-400">Checking…</span>
               ) : qboConnected ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                  Connected
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    Connected
+                  </span>
+                  <a href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/api/qbo/auth`} className="text-xs text-gray-400 hover:text-gray-600 underline">
+                    Reconnect
+                  </a>
+                </div>
               ) : (
                 <a href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}/api/qbo/auth`} className="btn-primary text-xs">
                   Connect QuickBooks
