@@ -55,6 +55,36 @@ export function AuthProvider({ children }) {
     setUser(null)
   }, [])
 
+  const startImpersonation = useCallback((data) => {
+    // Save admin's current session
+    localStorage.setItem('admin_token', localStorage.getItem('access_token'))
+    localStorage.setItem('admin_user', localStorage.getItem('user'))
+    // Swap in client session
+    localStorage.setItem('access_token', data.access_token)
+    const clientUser = {
+      id: data.user_id,
+      full_name: data.full_name,
+      role: data.role,
+      client_id: data.client_id || null,
+    }
+    localStorage.setItem('user', JSON.stringify(clientUser))
+    setUser(clientUser)
+  }, [])
+
+  const stopImpersonation = useCallback(() => {
+    const adminToken = localStorage.getItem('admin_token')
+    const adminUser = localStorage.getItem('admin_user')
+    if (adminToken) localStorage.setItem('access_token', adminToken)
+    if (adminUser) {
+      localStorage.setItem('user', adminUser)
+      try { setUser(JSON.parse(adminUser)) } catch { /* ignore */ }
+    }
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_user')
+  }, [])
+
+  const isImpersonating = !!localStorage.getItem('admin_token')
+
   const refreshUser = useCallback(async () => {
     try {
       const data = await getMe()
@@ -80,6 +110,9 @@ export function AuthProvider({ children }) {
     loginWithToken,
     logout,
     refreshUser,
+    startImpersonation,
+    stopImpersonation,
+    isImpersonating,
     isOwner: user?.role === 'owner',
     isAdmin: user?.role === 'admin' || user?.role === 'owner',
     isStaff: user?.role === 'staff',

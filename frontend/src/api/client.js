@@ -64,6 +64,9 @@ export const archivePortalUser = (userId) =>
 export const restorePortalUser = (userId) =>
   apiClient.patch(`/auth/portal-users/${userId}/restore`).then((r) => r.data)
 
+export const impersonateUser = (userId) =>
+  apiClient.post(`/auth/impersonate/${userId}`).then((r) => r.data)
+
 export const sendInvite = (data) =>
   apiClient.post('/auth/invite', data).then((r) => r.data)
 

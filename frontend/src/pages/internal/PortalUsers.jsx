@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getPortalUsers, deletePortalUser, sendInvite, getClients } from '../../api/client'
+import { useNavigate } from 'react-router-dom'
+import { getPortalUsers, deletePortalUser, sendInvite, getClients, impersonateUser } from '../../api/client'
 import apiClient from '../../api/client'
 import { formatDate } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
@@ -17,7 +18,8 @@ const ROLE_OPTIONS_ADMIN = [
 ]
 
 export default function PortalUsers() {
-  const { isOwner } = useAuth()
+  const { isOwner, startImpersonation } = useAuth()
+  const navigate = useNavigate()
   const [users, setUsers] = useState([])
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
@@ -130,6 +132,16 @@ export default function PortalUsers() {
   const clientCount = users.filter((u) => u.is_active && u.role === 'client').length
   const internalCount = users.filter((u) => u.is_active && INTERNAL_ROLES.includes(u.role)).length
   const archivedCount = users.filter((u) => !u.is_active).length
+
+  const handleViewAsClient = async (userId) => {
+    try {
+      const data = await impersonateUser(userId)
+      startImpersonation(data)
+      navigate('/client/dashboard')
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Could not start client view.')
+    }
+  }
 
   const roleBadgeClass = (role) => ({
     owner: 'bg-purple-100 text-purple-700',
@@ -263,15 +275,25 @@ export default function PortalUsers() {
                             )}
                           </>
                         ) : (
-                          isOwner && (
-                            <button
-                              onClick={() => handleArchive(u.id)}
-                              disabled={actionUserId === u.id}
-                              className="text-amber-600 hover:text-amber-700 font-medium text-sm disabled:opacity-40"
-                            >
-                              {actionUserId === u.id ? 'Archiving…' : 'Archive'}
-                            </button>
-                          )
+                          <>
+                            {u.role === 'client' && (
+                              <button
+                                onClick={() => handleViewAsClient(u.id)}
+                                className="text-primary-600 hover:text-primary-700 font-medium text-sm"
+                              >
+                                View as Client
+                              </button>
+                            )}
+                            {isOwner && (
+                              <button
+                                onClick={() => handleArchive(u.id)}
+                                disabled={actionUserId === u.id}
+                                className="text-amber-600 hover:text-amber-700 font-medium text-sm disabled:opacity-40"
+                              >
+                                {actionUserId === u.id ? 'Archiving…' : 'Archive'}
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>

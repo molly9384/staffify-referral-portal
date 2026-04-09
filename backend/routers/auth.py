@@ -134,6 +134,36 @@ async def setup_admin(setup_key: str, db: AsyncSession = Depends(get_db)):
         return {"message": "Admin user created with password ChangeMe123!"}
 
 
+@router.post("/impersonate/{user_id}")
+async def impersonate_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Generate a short-lived JWT for a client user so admins can preview their portal view."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    target = result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.role not in (UserRole.client,):
+        raise HTTPException(status_code=400, detail="Can only impersonate client users")
+    if not target.is_active:
+        raise HTTPException(status_code=400, detail="User is inactive")
+
+    token = create_access_token(
+        data={"sub": str(target.id), "role": target.role.value, "impersonated_by": str(current_user.id)},
+        expires_delta=timedelta(hours=2),
+    )
+    return Token(
+        access_token=token,
+        token_type="bearer",
+        role=target.role.value,
+        user_id=str(target.id),
+        full_name=target.full_name,
+        client_id=str(target.client_id) if target.client_id else None,
+    )
+
+
 @router.post("/promote-owner")
 async def promote_owner(setup_key: str, email: str, db: AsyncSession = Depends(get_db)):
     """One-time endpoint to promote a user to owner role. Requires ADMIN_SETUP_KEY env var."""
