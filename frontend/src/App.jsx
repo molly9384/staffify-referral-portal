@@ -47,7 +47,7 @@ export default function App() {
       <Route
         path="/internal"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'staff']}>
+          <ProtectedRoute allowedRoles={['admin', 'staff', 'owner']}>
             <InternalLayout />
           </ProtectedRoute>
         }
