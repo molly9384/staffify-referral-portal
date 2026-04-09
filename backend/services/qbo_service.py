@@ -189,6 +189,38 @@ class QBOService:
         data = await self._make_request("GET", url, params={"minorversion": "65"})
         return data.get("Invoice", {})
 
+    async def get_or_create_referral_credit_item(self) -> str:
+        """Find the 'Referral Credit' service item in QBO, creating it if needed. Returns item ID."""
+        url = f"{self.base_url}/{self.realm_id}/query"
+
+        # Check if it already exists
+        data = await self._make_request("GET", url, params={
+            "query": "SELECT * FROM Item WHERE Name = 'Referral Credit' MAXRESULTS 1",
+            "minorversion": "65",
+        })
+        items = data.get("QueryResponse", {}).get("Item", [])
+        if items:
+            return str(items[0].get("Id"))
+
+        # Need an income account to create the item — grab the first one
+        acct_data = await self._make_request("GET", url, params={
+            "query": "SELECT * FROM Account WHERE AccountType = 'Income' MAXRESULTS 1",
+            "minorversion": "65",
+        })
+        accounts = acct_data.get("QueryResponse", {}).get("Account", [])
+        if not accounts:
+            raise ValueError("No income accounts found in QBO — cannot create Referral Credit item")
+
+        acct = accounts[0]
+        create_url = f"{self.base_url}/{self.realm_id}/item"
+        item_data = await self._make_request("POST", create_url, json={
+            "Name": "Referral Credit",
+            "Type": "Service",
+            "IncomeAccountRef": {"value": str(acct.get("Id")), "name": acct.get("Name", "")},
+        }, params={"minorversion": "65"})
+
+        return str(item_data.get("Item", {}).get("Id"))
+
     async def apply_credit_to_invoice(
         self,
         invoice_id: str,
@@ -196,25 +228,28 @@ class QBOService:
         description: str,
     ) -> dict:
         """
-        Apply a credit as a negative line item to an invoice.
-        Uses a SalesItemLine with a negative amount (discount-style).
+        Apply a referral credit as a named negative line item on an invoice.
+        Uses the 'Referral Credit' service item so it appears clearly on the invoice.
         """
         if not self.realm_id:
             raise ValueError("QBO not connected: no realm_id")
 
-        # First, fetch the current invoice to get SyncToken (required for updates)
+        item_id = await self.get_or_create_referral_credit_item()
+
+        # Fetch the current invoice to get SyncToken (required for updates)
         invoice = await self.get_invoice(invoice_id)
         sync_token = invoice.get("SyncToken", "0")
         existing_lines = invoice.get("Line", [])
 
-        # Build the credit line item as a discount (DiscountLineDetail)
+        # Negative unit price so it reduces the invoice total
         credit_line = {
-            "Amount": abs(credit_amount),
-            "DetailType": "DiscountLineDetail",
+            "Amount": -abs(credit_amount),
+            "DetailType": "SalesItemLineDetail",
             "Description": description,
-            "DiscountLineDetail": {
-                "PercentBased": False,
-                "DiscountPercent": 0,
+            "SalesItemLineDetail": {
+                "ItemRef": {"value": item_id, "name": "Referral Credit"},
+                "Qty": 1,
+                "UnitPrice": -abs(credit_amount),
             },
         }
 
