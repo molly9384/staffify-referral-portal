@@ -1,4 +1,5 @@
 import os
+import uuid
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,7 +13,7 @@ from auth import (
 from config import settings
 from database import get_db
 from models import User, UserRole
-from schemas import LoginRequest, Token, UserCreate, UserOut, ChangePasswordRequest, UpdateProfileRequest, ForgotPasswordRequest, ResetPasswordRequest
+from schemas import LoginRequest, Token, UserCreate, UserOut, ChangePasswordRequest, UpdateProfileRequest, ForgotPasswordRequest, ResetPasswordRequest, ClientRegisterRequest, PortalUserOut
 
 router = APIRouter()
 
@@ -189,6 +190,111 @@ async def forgot_password(
             except Exception as e:
                 print(f"Email send failed: {e}")
     return {"message": "If an account exists with that email, a reset link has been sent."}
+
+
+@router.post("/register-client", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+async def register_client(request: ClientRegisterRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Self-service client registration. Email must match a QBO customer (or existing Client record).
+    Creates a Client record automatically if one doesn't exist yet.
+    """
+    # Check if a user account already exists for this email
+    result = await db.execute(select(User).where(User.email == request.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="An account already exists for that email. Please sign in.")
+
+    # Check local Client table first
+    from models import Client
+    client_result = await db.execute(select(Client).where(Client.email == request.email))
+    client = client_result.scalar_one_or_none()
+
+    if not client:
+        # Fall back to live QBO lookup
+        from services.qbo_service import QBOService
+        qbo = QBOService()
+        if not qbo.is_connected():
+            raise HTTPException(
+                status_code=400,
+                detail="We don't have an account on file for that email. Please contact Staffify."
+            )
+        try:
+            qbo_customer = await qbo.find_customer_by_email(request.email)
+        except Exception:
+            qbo_customer = None
+
+        if not qbo_customer:
+            raise HTTPException(
+                status_code=400,
+                detail="We don't have an account on file for that email. Please contact Staffify."
+            )
+
+        # Create a Client record from QBO data
+        client = Client(
+            name=qbo_customer["display_name"],
+            email=request.email,
+            qbo_customer_id=qbo_customer["id"],
+            is_active=True,
+        )
+        db.add(client)
+        await db.flush()
+
+    # Create the portal user account
+    new_user = User(
+        email=request.email,
+        hashed_password=get_password_hash(request.password),
+        full_name=request.full_name,
+        role=UserRole.client,
+        client_id=client.id,
+        is_active=True,
+    )
+    db.add(new_user)
+    await db.flush()
+    await db.refresh(new_user)
+    await db.commit()
+    return new_user
+
+
+@router.get("/portal-users", response_model=list[PortalUserOut])
+async def list_portal_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """List all client portal user accounts."""
+    from models import Client
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(User)
+        .where(User.role == UserRole.client)
+        .options(selectinload(User.client))
+        .order_by(User.created_at.desc())
+    )
+    users = result.scalars().all()
+    return [
+        PortalUserOut(
+            id=u.id,
+            email=u.email,
+            full_name=u.full_name,
+            is_active=u.is_active,
+            created_at=u.created_at,
+            client_name=u.client.name if u.client else None,
+        )
+        for u in users
+    ]
+
+
+@router.delete("/portal-users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_portal_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Remove a client portal user account."""
+    result = await db.execute(select(User).where(User.id == user_id, User.role == UserRole.client))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.delete(user)
+    await db.commit()
 
 
 @router.post("/reset-password")

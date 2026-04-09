@@ -134,6 +134,24 @@ class QBOService:
             response.raise_for_status()
             return response.json()
 
+    async def find_customer_by_email(self, email: str) -> Optional[dict]:
+        """Look up a QBO customer by primary email address. Returns id, display_name, email or None."""
+        if not self.realm_id:
+            raise ValueError("QBO not connected: no realm_id")
+        url = f"{self.base_url}/{self.realm_id}/query"
+
+        def _extract(c):
+            email_val = c.get("PrimaryEmailAddr", {}).get("Address", "") if c.get("PrimaryEmailAddr") else ""
+            return {"id": str(c.get("Id", "")), "display_name": c.get("DisplayName", ""), "email": email_val}
+
+        safe_email = email.strip().replace("'", "\\'")
+        query = f"SELECT * FROM Customer WHERE PrimaryEmailAddr = '{safe_email}' MAXRESULTS 1"
+        data = await self._make_request("GET", url, params={"query": query, "minorversion": "65"})
+        customers = data.get("QueryResponse", {}).get("Customer", [])
+        if customers:
+            return _extract(customers[0])
+        return None
+
     async def find_customer_by_name(self, display_name: str) -> Optional[dict]:
         """Look up a QBO customer by DisplayName. Returns id, display_name, email or None."""
         if not self.realm_id:

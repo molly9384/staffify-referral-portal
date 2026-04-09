@@ -49,6 +49,15 @@ export const changePassword = (data) =>
 export const forgotPassword = (email) =>
   apiClient.post('/auth/forgot-password', { email }).then((r) => r.data)
 
+export const registerClient = (data) =>
+  apiClient.post('/auth/register-client', data).then((r) => r.data)
+
+export const getPortalUsers = () =>
+  apiClient.get('/auth/portal-users').then((r) => r.data)
+
+export const deletePortalUser = (userId) =>
+  apiClient.delete(`/auth/portal-users/${userId}`).then((r) => r.data)
+
 export const resetPassword = (data) =>
   apiClient.post('/auth/reset-password', data).then((r) => r.data)
 

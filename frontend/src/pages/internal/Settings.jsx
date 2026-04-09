@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { changePassword, updateProfile } from '../../api/client'
+import { changePassword, updateProfile, getPortalUsers, deletePortalUser } from '../../api/client'
 import apiClient from '../../api/client'
+import { formatDate } from '../../utils/format'
 
 export default function Settings() {
   const { user, refreshUser } = useAuth()
@@ -57,6 +58,34 @@ export default function Settings() {
     apiClient.get('/hubstaff/status').then(r => setHubstaffConnected(r.data.connected)).catch(() => {}).finally(() => setHubstaffChecking(false))
     apiClient.get('/qbo/status').then(r => setQboConnected(r.data.connected)).catch(() => {}).finally(() => setQboChecking(false))
   }, [])
+
+  // Portal users state
+  const [portalUsers, setPortalUsers] = useState([])
+  const [portalUsersLoading, setPortalUsersLoading] = useState(false)
+  const [deletingUserId, setDeletingUserId] = useState(null)
+  const [portalUsersError, setPortalUsersError] = useState('')
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      setPortalUsersLoading(true)
+      getPortalUsers()
+        .then(setPortalUsers)
+        .catch(() => setPortalUsersError('Failed to load portal users.'))
+        .finally(() => setPortalUsersLoading(false))
+    }
+  }, [user])
+
+  const handleDeletePortalUser = async (userId) => {
+    setDeletingUserId(userId)
+    try {
+      await deletePortalUser(userId)
+      setPortalUsers((prev) => prev.filter((u) => u.id !== userId))
+    } catch {
+      setPortalUsersError('Failed to remove user.')
+    } finally {
+      setDeletingUserId(null)
+    }
+  }
 
   // Profile state
   const [fullName, setFullName] = useState(user?.full_name || '')
@@ -238,6 +267,49 @@ export default function Settings() {
                 </a>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Portal Users Card */}
+      {user?.role === 'admin' && (
+        <div className="card mb-6">
+          <div className="card-header">
+            <h2 className="text-base font-semibold text-gray-900">Client Portal Users</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Clients who have created a portal account.</p>
+          </div>
+          <div className="card-body">
+            {portalUsersError && (
+              <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{portalUsersError}</div>
+            )}
+            {portalUsersLoading ? (
+              <div className="space-y-3">
+                {[1, 2].map((i) => <div key={i} className="h-10 bg-gray-50 rounded-lg animate-pulse" />)}
+              </div>
+            ) : portalUsers.length === 0 ? (
+              <p className="text-sm text-gray-400">No clients have created a portal account yet.</p>
+            ) : (
+              <div className="divide-y divide-gray-50 -mx-6 -mb-6">
+                {portalUsers.map((u) => (
+                  <div key={u.id} className="flex items-center justify-between gap-4 px-6 py-3.5">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{u.full_name}</p>
+                      <p className="text-xs text-gray-400">{u.email}{u.client_name ? ` · ${u.client_name}` : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-4 flex-shrink-0">
+                      <p className="text-xs text-gray-400 hidden sm:block">Joined {formatDate(u.created_at)}</p>
+                      <button
+                        onClick={() => handleDeletePortalUser(u.id)}
+                        disabled={deletingUserId === u.id}
+                        className="text-sm text-red-500 hover:text-red-700 font-medium disabled:opacity-40"
+                      >
+                        {deletingUserId === u.id ? 'Removing…' : 'Remove'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

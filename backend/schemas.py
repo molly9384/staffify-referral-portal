@@ -44,6 +44,23 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class ClientRegisterRequest(BaseModel):
+    email: EmailStr
+    full_name: str
+    password: str
+
+
+class PortalUserOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    is_active: bool
+    created_at: datetime
+    client_name: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class UserOut(UserBase):
     id: uuid.UUID
     created_at: datetime

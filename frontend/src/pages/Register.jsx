@@ -1,34 +1,38 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { Link, useNavigate } from 'react-router-dom'
+import { registerClient } from '../api/client'
 
-export default function Login() {
+export default function Register() {
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const { login } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+
     setLoading(true)
     try {
-      const user = await login(email, password)
+      await registerClient({ full_name: fullName, email, password })
       setSuccess(true)
-      setTimeout(() => {
-        if (user.role === 'client') {
-          navigate('/client/dashboard', { replace: true })
-        } else {
-          navigate('/internal/dashboard', { replace: true })
-        }
-      }, 1500)
+      setTimeout(() => navigate('/login'), 2500)
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Invalid email or password. Please try again.'
-      setError(msg)
+      setError(err?.response?.data?.detail || 'Something went wrong. Please try again.')
       setLoading(false)
     }
   }
@@ -38,11 +42,12 @@ export default function Login() {
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6">
         <img src="/logo.png" alt="Staffify" className="h-14" />
         <div className="flex flex-col items-center gap-3">
-          <svg className="w-8 h-8 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <p className="text-white text-sm font-medium">Logging you in…</p>
+          <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <p className="text-white text-sm font-medium">Account created! Redirecting to sign in…</p>
         </div>
       </div>
     )
@@ -59,8 +64,10 @@ export default function Login() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-1">Sign in to your account</h2>
-          <p className="text-sm text-gray-500 mb-6">Enter your credentials to access the portal.</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-1">Create your account</h2>
+          <p className="text-sm text-gray-500 mb-6">
+            Already a Staffify client? Set up your referral portal access.
+          </p>
 
           {error && (
             <div className="mb-5 flex items-start gap-3 px-4 py-3 rounded-lg bg-red-50 border border-red-200">
@@ -71,19 +78,34 @@ export default function Login() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="fullName" className="label">Full Name</label>
+              <input
+                id="fullName"
+                type="text"
+                required
+                autoComplete="name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="input"
+                placeholder="Jane Smith"
+              />
+            </div>
+
             <div>
               <label htmlFor="email" className="label">Email address</label>
               <input
                 id="email"
                 type="email"
-                autoComplete="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input"
                 placeholder="you@example.com"
               />
+              <p className="text-xs text-gray-400 mt-1">Must match the email on file with Staffify.</p>
             </div>
 
             <div>
@@ -92,12 +114,12 @@ export default function Login() {
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
                   required
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input pr-10"
-                  placeholder="••••••••"
+                  placeholder="Min. 8 characters"
                 />
                 <button
                   type="button"
@@ -116,17 +138,26 @@ export default function Login() {
                   )}
                 </button>
               </div>
-              <div className="mt-2 text-right">
-                <Link to="/forgot-password" className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                  Forgot password?
-                </Link>
-              </div>
+            </div>
+
+            <div>
+              <label htmlFor="confirmPassword" className="label">Confirm Password</label>
+              <input
+                id="confirmPassword"
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="input"
+                placeholder="••••••••"
+              />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {loading ? (
                 <>
@@ -134,23 +165,23 @@ export default function Login() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Signing in…
+                  Creating account…
                 </>
               ) : (
-                'Sign in'
+                'Create account'
               )}
             </button>
           </form>
+
+          <p className="text-center text-sm text-gray-500 mt-6">
+            Already have an account?{' '}
+            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
+              Sign in
+            </Link>
+          </p>
         </div>
 
-        <p className="text-center text-sm text-gray-500 mt-5">
-          New client?{' '}
-          <Link to="/register" className="text-primary-400 hover:text-primary-300 font-medium">
-            Create an account
-          </Link>
-        </p>
-
-        <p className="text-center text-xs text-gray-600 mt-4">
+        <p className="text-center text-xs text-gray-600 mt-6">
           Staffify LLC — Referral Tracking System
         </p>
       </div>
