@@ -71,7 +71,7 @@ class QBOService:
         return tokens
 
     async def refresh_access_token(self) -> str:
-        """Refresh the QBO access token using the refresh token."""
+        """Refresh the QBO access token using the refresh token and persist to DB."""
         token_url = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
@@ -86,12 +86,33 @@ class QBOService:
             response.raise_for_status()
             tokens = response.json()
 
-        settings.QBO_ACCESS_TOKEN = tokens.get("access_token", "")
-        if tokens.get("refresh_token"):
-            settings.QBO_REFRESH_TOKEN = tokens["refresh_token"]
-        self.access_token = settings.QBO_ACCESS_TOKEN
-        self.refresh_token = settings.QBO_REFRESH_TOKEN
-        return self.access_token
+        new_access = tokens.get("access_token", "")
+        new_refresh = tokens.get("refresh_token", self.refresh_token)
+
+        settings.QBO_ACCESS_TOKEN = new_access
+        settings.QBO_REFRESH_TOKEN = new_refresh
+        self.access_token = new_access
+        self.refresh_token = new_refresh
+
+        # Persist to DB so tokens survive restarts (QBO refresh tokens rotate on every use)
+        try:
+            from database import AsyncSessionLocal
+            from models import SystemConfig
+            async with AsyncSessionLocal() as db:
+                for key, value in [
+                    ("QBO_ACCESS_TOKEN", new_access),
+                    ("QBO_REFRESH_TOKEN", new_refresh),
+                ]:
+                    existing = await db.get(SystemConfig, key)
+                    if existing:
+                        existing.value = value
+                    else:
+                        db.add(SystemConfig(key=key, value=value))
+                await db.commit()
+        except Exception as e:
+            print(f"Warning: could not persist refreshed QBO tokens: {e}")
+
+        return new_access
 
     def _get_headers(self) -> dict:
         return {
