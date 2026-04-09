@@ -141,6 +141,9 @@ export const recalculateCredit = (id) =>
 export const deleteCredit = (id) =>
   apiClient.delete(`/credits/${id}`)
 
+export const markCreditEligible = (id) =>
+  apiClient.post(`/credits/${id}/mark-eligible`).then((r) => r.data)
+
 // ---- Hubstaff ----
 
 export const getHubstaffProjects = () =>

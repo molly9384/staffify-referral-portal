@@ -180,6 +180,31 @@ async def update_credit(
     return credit
 
 
+@router.post("/{credit_id}/mark-eligible", response_model=CreditLedgerOut)
+async def mark_credit_eligible(
+    credit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Manually promote a pending credit to eligible for testing purposes."""
+    result = await db.execute(
+        select(CreditLedger)
+        .where(CreditLedger.id == credit_id)
+        .options(selectinload(CreditLedger.referral))
+    )
+    credit = result.scalar_one_or_none()
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit entry not found")
+    if credit.status != CreditStatus.pending:
+        raise HTTPException(status_code=400, detail=f"Credit is already '{credit.status}', not pending")
+
+    credit.status = CreditStatus.eligible
+    credit.notes = ((credit.notes or "") + f" [Manually marked eligible on {__import__('datetime').date.today()}]").strip()
+    await db.commit()
+    await db.refresh(credit)
+    return credit
+
+
 @router.post("/{credit_id}/recalculate", response_model=CreditLedgerOut)
 async def recalculate_credit(
     credit_id: uuid.UUID,

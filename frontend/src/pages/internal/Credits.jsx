@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCredits, getCreditSummary, runCreditAutomation, applyCredits, updateCredit, recalculateCredit, deleteCredit } from '../../api/client'
+import { getCredits, getCreditSummary, runCreditAutomation, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible } from '../../api/client'
 import CreditSummaryComponent from '../../components/CreditSummary'
 import { formatDate, formatCurrency } from '../../utils/format'
 
@@ -150,6 +150,16 @@ export default function Credits() {
       setError(err?.response?.data?.detail || 'Failed to apply credits.')
     } finally {
       setApplyRunning(false)
+    }
+  }
+
+  const handleMarkEligible = async (creditId) => {
+    try {
+      await markCreditEligible(creditId)
+      setSuccessMsg('Credit marked eligible.')
+      await Promise.all([load(), loadSummary()])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to mark eligible.')
     }
   }
 
@@ -342,6 +352,13 @@ export default function Credits() {
                                   {isRecalculating ? 'Recalc…' : 'Recalc'}
                                 </button>
                               )}
+                              <button
+                                onClick={() => handleMarkEligible(credit.id)}
+                                className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                                title="Manually mark as eligible (for testing)"
+                              >
+                                Mark Eligible
+                              </button>
                             </>
                           )}
                           {deletingCredit === credit.id ? (
