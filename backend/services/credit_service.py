@@ -464,18 +464,33 @@ class CreditService:
                     skipped += 1
                     continue
 
-                # Only one credit per referral per QBO invoice — prevent stacking
+                # Only one credit per referral ever — if any applied credit already
+                # exists for this referral (on any invoice), void this one immediately.
+                # Duplicate credits from the same referral are forfeited, not deferred.
                 dup_check = await self.db.execute(
                     select(CreditLedger).where(
                         CreditLedger.referral_id == credit.referral_id,
-                        CreditLedger.qbo_invoice_id == invoice_id,
                         CreditLedger.status == CreditStatus.applied,
                     )
                 )
                 if dup_check.scalar_one_or_none():
+                    original_amount = Decimal(str(credit.credit_amount))
+                    credit.status = CreditStatus.voided
                     credit.notes = (
-                        (credit.notes or "") + " [Skipped: credit for this referral already applied to this invoice]"
+                        (credit.notes or "") + " [Voided: only one credit per referral per billing cycle per program policy]"
                     ).strip()
+                    voided_excess += original_amount
+                    # Reduce total_credits_earned since this credit is forfeited
+                    referral_result = await self.db.execute(
+                        select(Referral).where(Referral.id == credit.referral_id)
+                    )
+                    referral = referral_result.scalar_one_or_none()
+                    if referral:
+                        referral.total_credits_earned = max(
+                            Decimal("0"),
+                            Decimal(str(referral.total_credits_earned)) - original_amount,
+                        )
+                    print(f"[DEBUG apply] credit {credit.id}: voided ${original_amount} — duplicate for referral {credit.referral_id}")
                     skipped += 1
                     continue
 
