@@ -138,7 +138,7 @@ function addFooters(doc, font, logo) {
 
     doc.text(prefix, startX, baseY)
     if (logo) {
-      doc.addImage(logo.data, 'PNG', startX + prefixW, baseY - logoH * 0.88, logoW, logoH)
+      doc.addImage(logo.data, 'PNG', startX + prefixW, baseY - logoH * 0.6, logoW, logoH)
     }
 
     // Page number — right side
