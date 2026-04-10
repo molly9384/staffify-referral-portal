@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from database import engine, Base
-from routers import auth, clients, referrals, vas, credits, hubstaff, qbo, dashboard
+from routers import auth, clients, referrals, vas, credits, hubstaff, qbo, dashboard, reports
 from scheduler import start_scheduler, stop_scheduler
 
 
@@ -119,6 +119,7 @@ app.include_router(credits.router, prefix="/api/credits", tags=["Credits"])
 app.include_router(hubstaff.router, tags=["Hubstaff"])
 app.include_router(qbo.router, prefix="/api/qbo", tags=["QuickBooks Online"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 
 
 @app.get("/health")

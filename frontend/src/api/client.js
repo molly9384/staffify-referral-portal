@@ -194,6 +194,14 @@ export const getHubstaffOrgMembers = () =>
 export const registerHubstaffWebhook = () =>
   apiClient.post('/hubstaff/register-webhook').then((r) => r.data)
 
+// ---- Reports ----
+
+export const getAdminReport = (params) =>
+  apiClient.get('/reports/admin', { params }).then((r) => r.data)
+
+export const getClientReport = (params) =>
+  apiClient.get('/reports/client', { params }).then((r) => r.data)
+
 // ---- QBO ----
 
 export const getQBOStatus = () =>
