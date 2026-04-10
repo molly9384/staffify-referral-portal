@@ -1,10 +1,10 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
-const BRAND = [26, 189, 225]   // #1abde1
-const DARK   = [17, 17, 17]
-const GRAY   = [107, 114, 128]
-const LIGHT  = [249, 250, 251]
+const BRAND = [26, 189, 225]
+const DARK  = [17, 17, 17]
+const GRAY  = [107, 114, 128]
+const LIGHT = [249, 250, 251]
 
 const STATUS_LABELS = {
   referred: 'Referred', contacted: 'Contacted', call_scheduled: 'Call Scheduled',
@@ -27,6 +27,40 @@ function fmtDate(str) {
   })
 }
 
+// ─── Font loader ──────────────────────────────────────────────────────────────
+
+async function loadMontserrat(doc) {
+  try {
+    const [regRes, boldRes] = await Promise.all([
+      fetch('/Montserrat-Regular.ttf'),
+      fetch('/Montserrat-Bold.ttf'),
+    ])
+    if (!regRes.ok || !boldRes.ok) return false
+
+    const toBase64 = async (res) => {
+      const buf = await res.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      let binary = ''
+      const chunk = 8192
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
+      }
+      return btoa(binary)
+    }
+
+    const [regB64, boldB64] = await Promise.all([toBase64(regRes), toBase64(boldRes)])
+    doc.addFileToVFS('Montserrat-Regular.ttf', regB64)
+    doc.addFont('Montserrat-Regular.ttf', 'Montserrat', 'normal')
+    doc.addFileToVFS('Montserrat-Bold.ttf', boldB64)
+    doc.addFont('Montserrat-Bold.ttf', 'Montserrat', 'bold')
+    return true
+  } catch {
+    return false
+  }
+}
+
+// ─── Logo loader ──────────────────────────────────────────────────────────────
+
 async function loadLogo() {
   return new Promise((resolve) => {
     const img = new Image()
@@ -36,97 +70,150 @@ async function loadLogo() {
       canvas.width = img.naturalWidth
       canvas.height = img.naturalHeight
       canvas.getContext('2d').drawImage(img, 0, 0)
-      resolve(canvas.toDataURL('image/png'))
+      resolve({ data: canvas.toDataURL('image/png'), aspect: img.naturalWidth / img.naturalHeight })
     }
     img.onerror = () => resolve(null)
     img.src = '/logo.png'
   })
 }
 
-function addHeader(doc, title, subtitle) {
+// ─── Document setup ───────────────────────────────────────────────────────────
+
+async function createDoc() {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const hasMontserrat = await loadMontserrat(doc)
+  const font = hasMontserrat ? 'Montserrat' : 'helvetica'
+  const logo = await loadLogo()
+  return { doc, font, logo }
+}
+
+// ─── Page header ──────────────────────────────────────────────────────────────
+
+function addHeader(doc, font, logo, title, subtitle) {
   const W = doc.internal.pageSize.getWidth()
   const margin = 20
-  let y = 18
 
-  // Accent bar at top
-  doc.setFillColor(...BRAND)
-  doc.rect(0, 0, W, 5, 'F')
+  // Logo — top left
+  const logoH = 11
+  const logoW = logo ? logoH * logo.aspect : 38
+  const logoY = 18
+  if (logo) doc.addImage(logo.data, 'PNG', margin, logoY, logoW, logoH)
 
-  // Logo placeholder area — logo added after (async)
-  doc._logoY = y
-  doc._logoMargin = margin
-  y += 14
-
-  // Generated date
+  // Generated date — top right
   doc.setFontSize(8)
+  doc.setFont(font, 'normal')
   doc.setTextColor(...GRAY)
   const generated = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  doc.text(`Generated ${generated}`, W - margin, 22, { align: 'right' })
+  doc.text(`Generated ${generated}`, W - margin, logoY + 7, { align: 'right' })
 
-  // Title
-  doc.setFontSize(18)
+  // Title — below logo with clear breathing room
+  const titleY = logoY + logoH + 10
+  doc.setFontSize(20)
+  doc.setFont(font, 'bold')
   doc.setTextColor(...DARK)
-  doc.setFont('helvetica', 'bold')
-  doc.text(title, margin, y)
-  y += 7
+  doc.text(title, margin, titleY)
 
   // Subtitle
   doc.setFontSize(10)
+  doc.setFont(font, 'normal')
   doc.setTextColor(...GRAY)
-  doc.setFont('helvetica', 'normal')
-  doc.text(subtitle, margin, y)
-  y += 8
+  doc.text(subtitle, margin, titleY + 7)
 
   // Divider
+  const divY = titleY + 13
   doc.setDrawColor(229, 231, 235)
   doc.setLineWidth(0.4)
-  doc.line(margin, y, W - margin, y)
-  y += 8
+  doc.line(margin, divY, W - margin, divY)
 
-  return y
+  return divY + 8 // content starts here
 }
 
-function addSectionTitle(doc, label, y) {
+// ─── Section label ────────────────────────────────────────────────────────────
+
+function addSection(doc, font, label, y) {
   doc.setFontSize(10)
+  doc.setFont(font, 'bold')
   doc.setTextColor(...DARK)
-  doc.setFont('helvetica', 'bold')
   doc.text(label, 20, y)
-  return y + 4
+  return y + 5
 }
 
-function addFooters(doc) {
+// ─── Page footers (all pages) ─────────────────────────────────────────────────
+
+function addFooters(doc, font, logo) {
   const pages = doc.internal.getNumberOfPages()
   const W = doc.internal.pageSize.getWidth()
   const H = doc.internal.pageSize.getHeight()
+
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i)
-    doc.setFillColor(...BRAND)
-    doc.rect(0, H - 4, W, 4, 'F')
+
+    // Thin divider above footer
+    doc.setDrawColor(229, 231, 235)
+    doc.setLineWidth(0.3)
+    doc.line(20, H - 12, W - 20, H - 12)
+
+    const baseY = H - 7
+
+    // "Powered by " text + logo
     doc.setFontSize(7.5)
+    doc.setFont(font, 'normal')
     doc.setTextColor(...GRAY)
-    doc.text(`Staffify Referral Portal  ·  Page ${i} of ${pages}`, W / 2, H - 7, { align: 'center' })
+
+    const prefix = 'Powered by  '
+    const prefixW = doc.getTextWidth(prefix)
+    const logoH = 3.2
+    const logoW = logo ? logoH * logo.aspect : 12
+
+    const blockW = prefixW + logoW
+    const startX = (W - blockW) / 2
+
+    doc.text(prefix, startX, baseY)
+    if (logo) {
+      doc.addImage(logo.data, 'PNG', startX + prefixW, baseY - logoH * 0.88, logoW, logoH)
+    }
+
+    // Page number — right side
+    doc.setTextColor(...GRAY)
+    doc.text(`Page ${i} of ${pages}`, W - 20, baseY, { align: 'right' })
   }
 }
 
-const TABLE_DEFAULTS = {
-  styles: { fontSize: 8.5, cellPadding: 3 },
-  headStyles: { fillColor: BRAND, textColor: 255, fontStyle: 'bold', fontSize: 8 },
-  alternateRowStyles: { fillColor: LIGHT },
-  margin: { left: 20, right: 20 },
+// ─── Table helpers ────────────────────────────────────────────────────────────
+
+// Ensures header cells in the given columns also get the specified alignment
+function alignHeadHook(centerCols = [], rightCols = []) {
+  return {
+    didParseCell: (data) => {
+      if (data.section === 'head') {
+        if (centerCols.includes(data.column.index)) data.cell.styles.halign = 'center'
+        if (rightCols.includes(data.column.index)) data.cell.styles.halign = 'right'
+      }
+    },
+  }
+}
+
+function tDefaults(font) {
+  return {
+    styles: { font, fontSize: 8.5, cellPadding: { top: 4, right: 8, bottom: 4, left: 8 } },
+    headStyles: { fillColor: BRAND, textColor: 255, fontStyle: 'bold', fontSize: 8, font },
+    alternateRowStyles: { fillColor: LIGHT },
+    margin: { left: 20, right: 20 },
+  }
 }
 
 // ─── Admin report ──────────────────────────────────────────────────────────────
 
 export async function generateAdminReportPDF(report, dateRangeLabel, clientName) {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const { doc, font, logo } = await createDoc()
   const subtitle = clientName ? `${clientName}  ·  ${dateRangeLabel}` : dateRangeLabel
-
-  let y = addHeader(doc, 'Staffify Referral Report', subtitle)
+  let y = addHeader(doc, font, logo, 'Referral Report', subtitle)
+  const td = tDefaults(font)
 
   // Summary
-  y = addSectionTitle(doc, 'Summary', y)
+  y = addSection(doc, font, 'Summary', y)
   autoTable(doc, {
-    ...TABLE_DEFAULTS,
+    ...td,
     startY: y,
     head: [['Metric', 'Value']],
     body: [
@@ -137,15 +224,16 @@ export async function generateAdminReportPDF(report, dateRangeLabel, clientName)
       ['Credits Applied', fmt$(report.summary.total_credits_applied)],
       ['Credits Pending', fmt$(report.summary.total_credits_pending)],
     ],
-    columnStyles: { 1: { halign: 'right' } },
+    columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' } },
+    ...alignHeadHook([], [1]),
   })
   y = doc.lastAutoTable.finalY + 10
 
   // Top Referrers
   if (report.top_referrers.length > 0) {
-    y = addSectionTitle(doc, 'Top Referrers', y)
+    y = addSection(doc, font, 'Top Referrers', y)
     autoTable(doc, {
-      ...TABLE_DEFAULTS,
+      ...td,
       startY: y,
       head: [['Client', 'Referrals Sent', 'Active', 'Credits Earned', 'Credits Applied']],
       body: report.top_referrers.map((r) => [
@@ -155,16 +243,23 @@ export async function generateAdminReportPDF(report, dateRangeLabel, clientName)
         fmt$(r.credits_earned),
         fmt$(r.credits_applied),
       ]),
-      columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
+      columnStyles: {
+        0: { halign: 'left' },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'right' },
+        4: { halign: 'right' },
+      },
+      ...alignHeadHook([1, 2], [3, 4]),
     })
     y = doc.lastAutoTable.finalY + 10
   }
 
   // Pipeline
   if (report.pipeline.length > 0) {
-    y = addSectionTitle(doc, 'Pipeline Breakdown', y)
+    y = addSection(doc, font, 'Pipeline Breakdown', y)
     autoTable(doc, {
-      ...TABLE_DEFAULTS,
+      ...td,
       startY: y,
       head: [['Status', 'Count', '% of Total']],
       body: [...report.pipeline]
@@ -176,33 +271,26 @@ export async function generateAdminReportPDF(report, dateRangeLabel, clientName)
             ? Math.round((row.count / report.summary.total_referrals) * 100) + '%'
             : '—',
         ]),
-      columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' } },
+      columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' }, 2: { halign: 'center' } },
+      ...alignHeadHook([1, 2], []),
     })
   }
 
-  // Add logo last (async)
-  const logoData = await loadLogo()
-  if (logoData) {
-    doc.setPage(1)
-    doc.addImage(logoData, 'PNG', doc._logoMargin, doc._logoY, 38, 11)
-  }
-
-  addFooters(doc)
+  addFooters(doc, font, logo)
   return doc
 }
 
 // ─── Client report ─────────────────────────────────────────────────────────────
 
 export async function generateClientReportPDF(report, dateRangeLabel, clientName) {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const subtitle = `${clientName}  ·  ${dateRangeLabel}`
-
-  let y = addHeader(doc, 'Referral Activity Report', subtitle)
+  const { doc, font, logo } = await createDoc()
+  let y = addHeader(doc, font, logo, 'Referral Activity Report', `${clientName}  ·  ${dateRangeLabel}`)
+  const td = tDefaults(font)
 
   // Summary
-  y = addSectionTitle(doc, 'Summary', y)
+  y = addSection(doc, font, 'Summary', y)
   autoTable(doc, {
-    ...TABLE_DEFAULTS,
+    ...td,
     startY: y,
     head: [['Metric', 'Value']],
     body: [
@@ -212,15 +300,16 @@ export async function generateClientReportPDF(report, dateRangeLabel, clientName
       ['Credits Pending', fmt$(report.summary.credits_pending)],
       ['Credits Applied', fmt$(report.summary.credits_applied)],
     ],
-    columnStyles: { 1: { halign: 'right' } },
+    columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' } },
+    ...alignHeadHook([], [1]),
   })
   y = doc.lastAutoTable.finalY + 10
 
   // Referrals
   if (report.referrals.length > 0) {
-    y = addSectionTitle(doc, 'My Referrals', y)
+    y = addSection(doc, font, 'My Referrals', y)
     autoTable(doc, {
-      ...TABLE_DEFAULTS,
+      ...td,
       startY: y,
       head: [['Referred Person', 'Status', 'Date', 'Credits Earned', 'Credits Applied']],
       body: report.referrals.map((r) => [
@@ -230,17 +319,24 @@ export async function generateClientReportPDF(report, dateRangeLabel, clientName
         fmt$(r.credits_earned),
         fmt$(r.credits_applied),
       ]),
-      columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } },
+      columnStyles: {
+        0: { halign: 'left' },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'right' },
+        4: { halign: 'right' },
+      },
+      ...alignHeadHook([1, 2], [3, 4]),
     })
     y = doc.lastAutoTable.finalY + 10
   }
 
   // Credit detail
   if (report.credits.length > 0) {
-    y = addSectionTitle(doc, 'Credit Detail', y)
+    y = addSection(doc, font, 'Credit Detail', y)
     const totalCredits = report.credits.reduce((s, c) => s + c.credit_amount, 0)
     autoTable(doc, {
-      ...TABLE_DEFAULTS,
+      ...td,
       startY: y,
       head: [['Referral', 'Billing Period', 'Hrs', 'Credit', 'Status', 'Applied']],
       body: report.credits.map((c) => [
@@ -252,18 +348,19 @@ export async function generateClientReportPDF(report, dateRangeLabel, clientName
         fmtDate(c.applied_date),
       ]),
       foot: [['', '', 'Total', fmt$(totalCredits), '', '']],
-      footStyles: { fillColor: [240, 250, 254], fontStyle: 'bold', textColor: BRAND },
-      columnStyles: { 2: { halign: 'center' }, 3: { halign: 'right' } },
+      footStyles: { fillColor: [240, 250, 254], fontStyle: 'bold', textColor: BRAND, font },
+      columnStyles: {
+        0: { halign: 'left' },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'right' },
+        4: { halign: 'center' },
+        5: { halign: 'center' },
+      },
+      ...alignHeadHook([1, 2, 4, 5], [3]),
     })
   }
 
-  // Logo
-  const logoData = await loadLogo()
-  if (logoData) {
-    doc.setPage(1)
-    doc.addImage(logoData, 'PNG', doc._logoMargin, doc._logoY, 38, 11)
-  }
-
-  addFooters(doc)
+  addFooters(doc, font, logo)
   return doc
 }

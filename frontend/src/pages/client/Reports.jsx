@@ -74,7 +74,7 @@ function EmailModal({ onClose, onSend, sending, sent, error }) {
         )}
         <div className="flex gap-3">
           {!sent && (
-            <button onClick={() => onSend(email)} disabled={sending || !email} className="btn-primary flex-1">
+            <button onClick={() => onSend(email)} disabled={sending || !email} className="btn-primary flex-1 flex items-center justify-center">
               {sending ? 'Sending…' : 'Send Report'}
             </button>
           )}

@@ -86,7 +86,7 @@ function EmailModal({ onClose, onSend, sending, sent, error }) {
             <button
               onClick={() => onSend(email)}
               disabled={sending || !email}
-              className="btn-primary flex-1"
+              className="btn-primary flex-1 flex items-center justify-center"
             >
               {sending ? 'Sending…' : 'Send Report'}
             </button>
