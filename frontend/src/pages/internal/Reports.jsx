@@ -1,30 +1,20 @@
 import { useState, useEffect } from 'react'
 import apiClient from '../../api/client'
+import { getClients, sendReportEmail } from '../../api/client'
+import { generateAdminReportPDF } from '../../utils/reportPDF'
 
 const STATUS_LABELS = {
-  referred: 'Referred',
-  contacted: 'Contacted',
-  call_scheduled: 'Call Scheduled',
-  contract_signed: 'Contract Signed',
-  va_hired: 'VA Hired',
-  va_billing: 'VA Billing',
-  active: 'Active',
-  paused: 'Paused',
-  expired: 'Expired',
-  ceased: 'Ceased',
+  referred: 'Referred', contacted: 'Contacted', call_scheduled: 'Call Scheduled',
+  contract_signed: 'Contract Signed', va_hired: 'VA Hired', va_billing: 'VA Billing',
+  active: 'Active', paused: 'Paused', expired: 'Expired', ceased: 'Ceased',
 }
 
 const STATUS_COLORS = {
-  referred: 'bg-blue-100 text-blue-700',
-  contacted: 'bg-indigo-100 text-indigo-700',
-  call_scheduled: 'bg-violet-100 text-violet-700',
-  contract_signed: 'bg-purple-100 text-purple-700',
-  va_hired: 'bg-amber-100 text-amber-700',
-  va_billing: 'bg-orange-100 text-orange-700',
-  active: 'bg-green-100 text-green-700',
-  paused: 'bg-yellow-100 text-yellow-700',
-  expired: 'bg-gray-100 text-gray-600',
-  ceased: 'bg-red-100 text-red-700',
+  referred: 'bg-blue-100 text-blue-700', contacted: 'bg-indigo-100 text-indigo-700',
+  call_scheduled: 'bg-violet-100 text-violet-700', contract_signed: 'bg-purple-100 text-purple-700',
+  va_hired: 'bg-amber-100 text-amber-700', va_billing: 'bg-orange-100 text-orange-700',
+  active: 'bg-green-100 text-green-700', paused: 'bg-yellow-100 text-yellow-700',
+  expired: 'bg-gray-100 text-gray-600', ceased: 'bg-red-100 text-red-700',
 }
 
 function formatCurrency(val) {
@@ -33,9 +23,7 @@ function formatCurrency(val) {
 
 function formatDate(str) {
   if (!str) return '—'
-  return new Date(str + 'T12:00:00').toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  })
+  return new Date(str + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function SummaryCard({ label, value, highlight }) {
@@ -48,15 +36,12 @@ function SummaryCard({ label, value, highlight }) {
 }
 
 function SortHeader({ label, col, sortBy, sortDir, onSort }) {
-  const isActive = sortBy === col
+  const active = sortBy === col
   return (
-    <th
-      onClick={() => onSort(col)}
-      className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none"
-    >
+    <th onClick={() => onSort(col)} className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none">
       <span className="inline-flex items-center gap-1">
         {label}
-        {isActive ? (
+        {active ? (
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d={sortDir === 'desc' ? 'M19 9l-7 7-7-7' : 'M5 15l7-7 7 7'} />
           </svg>
@@ -70,22 +55,80 @@ function SortHeader({ label, col, sortBy, sortDir, onSort }) {
   )
 }
 
+function EmailModal({ onClose, onSend, sending, sent, error }) {
+  const [email, setEmail] = useState('')
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+        <h3 className="text-base font-semibold text-gray-900 mb-1">Email Report</h3>
+        <p className="text-sm text-gray-500 mb-4">The report PDF will be sent as an attachment.</p>
+        {sent ? (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-green-50 border border-green-200 mb-4">
+            <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            <p className="text-sm text-green-700">Report sent successfully!</p>
+          </div>
+        ) : (
+          <>
+            {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+            <label className="label">Email Address</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input mb-4"
+              placeholder="recipient@example.com"
+              autoFocus
+            />
+          </>
+        )}
+        <div className="flex gap-3">
+          {!sent && (
+            <button
+              onClick={() => onSend(email)}
+              disabled={sending || !email}
+              className="btn-primary flex-1"
+            >
+              {sending ? 'Sending…' : 'Send Report'}
+            </button>
+          )}
+          <button onClick={onClose} className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            {sent ? 'Close' : 'Cancel'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminReports() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [clientId, setClientId] = useState('')
+  const [clients, setClients] = useState([])
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sortBy, setSortBy] = useState('referrals_sent')
   const [sortDir, setSortDir] = useState('desc')
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailError, setEmailError] = useState('')
 
-  const fetchReport = async (start, end) => {
+  useEffect(() => {
+    getClients().then(setClients).catch(() => {})
+    fetchReport('', '', '')
+  }, [])
+
+  const fetchReport = async (start, end, cid) => {
     setLoading(true)
     setError('')
     try {
       const params = {}
       if (start) params.start_date = start
       if (end) params.end_date = end
+      if (cid) params.client_id = cid
       const res = await apiClient.get('/reports/admin', { params })
       setReport(res.data)
     } catch {
@@ -95,22 +138,62 @@ export default function AdminReports() {
     }
   }
 
-  useEffect(() => { fetchReport('', '') }, [])
-
   const handleApply = (e) => {
     e.preventDefault()
-    fetchReport(startDate, endDate)
+    fetchReport(startDate, endDate, clientId)
   }
 
   const handleClear = () => {
     setStartDate('')
     setEndDate('')
-    fetchReport('', '')
+    setClientId('')
+    fetchReport('', '', '')
   }
 
   const handleSort = (col) => {
     if (sortBy === col) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
     else { setSortBy(col); setSortDir('desc') }
+  }
+
+  const selectedClient = clients.find((c) => c.id === clientId)
+
+  const dateRangeLabel = startDate
+    ? `${formatDate(startDate)} – ${formatDate(endDate || new Date().toISOString().slice(0, 10))}`
+    : 'All time'
+
+  const handleDownloadPDF = async () => {
+    if (!report) return
+    setPdfLoading(true)
+    try {
+      const doc = await generateAdminReportPDF(report, dateRangeLabel, selectedClient?.name)
+      const filename = `staffify-report-${new Date().toISOString().slice(0, 10)}.pdf`
+      doc.save(filename)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const handleSendEmail = async (email) => {
+    if (!report || !email) return
+    setEmailSending(true)
+    setEmailError('')
+    try {
+      const doc = await generateAdminReportPDF(report, dateRangeLabel, selectedClient?.name)
+      const filename = `staffify-report-${new Date().toISOString().slice(0, 10)}.pdf`
+      const pdfBlob = doc.output('datauristring')
+      const base64 = pdfBlob.split(',')[1]
+      await sendReportEmail({
+        email,
+        subject: `Staffify Referral Report – ${dateRangeLabel}`,
+        filename,
+        pdf_base64: base64,
+      })
+      setEmailSent(true)
+    } catch {
+      setEmailError('Failed to send. Please try again.')
+    } finally {
+      setEmailSending(false)
+    }
   }
 
   const sortedReferrers = report?.top_referrers
@@ -120,83 +203,93 @@ export default function AdminReports() {
       })
     : []
 
-  const dateRangeLabel = report?.date_range?.start
-    ? `${formatDate(report.date_range.start)} – ${formatDate(report.date_range.end)}`
-    : 'All time'
-
   return (
     <>
-      {/* Print styles */}
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          .print-header { display: block !important; }
-          aside { display: none !important; }
-          main { overflow: visible !important; }
-          body { background: white !important; }
-        }
-      `}</style>
+      {showEmailModal && (
+        <EmailModal
+          onClose={() => { setShowEmailModal(false); setEmailSent(false); setEmailError('') }}
+          onSend={handleSendEmail}
+          sending={emailSending}
+          sent={emailSent}
+          error={emailError}
+        />
+      )}
 
       <div className="p-8 max-w-5xl">
-
-        {/* Print-only header */}
-        <div className="hidden print-header mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Staffify Referral Report</h1>
-          <p className="text-sm text-gray-500 mt-1">{dateRangeLabel}</p>
-        </div>
-
-        {/* Page header */}
-        <div className="flex items-start justify-between mb-6 no-print">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
             <p className="text-gray-500 text-sm mt-1">View referral activity, top referrers, and credit totals.</p>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            Print / Save PDF
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setEmailSent(false); setEmailError(''); setShowEmailModal(true) }}
+              disabled={!report || loading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Email
+            </button>
+            <button
+              onClick={handleDownloadPDF}
+              disabled={!report || loading || pdfLoading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-40"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {pdfLoading ? 'Generating…' : 'Download PDF'}
+            </button>
+          </div>
         </div>
 
-        {/* Date filter */}
-        <form onSubmit={handleApply} className="flex flex-wrap items-end gap-3 mb-6 no-print">
+        {/* Filters */}
+        <form onSubmit={handleApply} className="flex flex-wrap items-end gap-3 mb-6">
+          <div>
+            <label className="label">Client</label>
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              className="input"
+            >
+              <option value="">All Clients</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="label">Start Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="input"
-            />
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input" />
           </div>
           <div>
             <label className="label">End Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="input"
-            />
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="input" />
           </div>
           <button type="submit" className="btn-primary">Apply</button>
-          {(startDate || endDate) && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
-            >
-              Clear
-            </button>
+          {(startDate || endDate || clientId) && (
+            <button type="button" onClick={handleClear} className="text-sm text-gray-500 hover:text-gray-700 underline">Clear</button>
           )}
         </form>
 
-        {/* Date range shown when printing */}
-        {(startDate || endDate) && (
-          <p className="text-sm text-gray-500 mb-4 hidden print-header">{dateRangeLabel}</p>
+        {/* Active filter pills */}
+        {(clientId || startDate) && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {selectedClient && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-50 text-primary-700 text-xs font-medium border border-primary-200">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                {selectedClient.name}
+              </span>
+            )}
+            {startDate && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+                {dateRangeLabel}
+              </span>
+            )}
+          </div>
         )}
 
         {loading && (
@@ -234,7 +327,7 @@ export default function AdminReports() {
               </div>
               <div className="overflow-x-auto">
                 {sortedReferrers.length === 0 ? (
-                  <p className="text-sm text-gray-500 px-6 py-8 text-center">No referral data for the selected period.</p>
+                  <p className="text-sm text-gray-500 px-6 py-8 text-center">No referral data for the selected filters.</p>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
@@ -251,21 +344,15 @@ export default function AdminReports() {
                         <tr key={r.client_id} className="hover:bg-gray-50">
                           <td className="px-6 py-3 font-medium text-gray-900">
                             <span className="inline-flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 font-semibold flex-shrink-0">
-                                {i + 1}
-                              </span>
+                              <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 font-semibold flex-shrink-0">{i + 1}</span>
                               {r.client_name}
                             </span>
                           </td>
                           <td className="px-6 py-3 text-gray-700">{r.referrals_sent}</td>
                           <td className="px-6 py-3">
                             {r.active_referrals > 0 ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                                {r.active_referrals}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">0</span>
-                            )}
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">{r.active_referrals}</span>
+                            ) : <span className="text-gray-400">0</span>}
                           </td>
                           <td className="px-6 py-3 text-gray-700">{formatCurrency(r.credits_earned)}</td>
                           <td className="px-6 py-3 text-gray-700">{formatCurrency(r.credits_applied)}</td>
@@ -287,7 +374,7 @@ export default function AdminReports() {
               </div>
               <div className="overflow-x-auto">
                 {report.pipeline.length === 0 ? (
-                  <p className="text-sm text-gray-500 px-6 py-8 text-center">No data for the selected period.</p>
+                  <p className="text-sm text-gray-500 px-6 py-8 text-center">No data for the selected filters.</p>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
@@ -295,36 +382,30 @@ export default function AdminReports() {
                         <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
                         <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">% of Total</th>
-                        <th className="px-6 py-3 w-48"></th>
+                        <th className="px-6 py-3 w-48" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {[...report.pipeline]
-                        .sort((a, b) => b.count - a.count)
-                        .map((row) => {
-                          const pct = report.summary.total_referrals > 0
-                            ? Math.round((row.count / report.summary.total_referrals) * 100)
-                            : 0
-                          return (
-                            <tr key={row.status} className="hover:bg-gray-50">
-                              <td className="px-6 py-3">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600'}`}>
-                                  {STATUS_LABELS[row.status] || row.status}
-                                </span>
-                              </td>
-                              <td className="px-6 py-3 text-gray-700 font-medium">{row.count}</td>
-                              <td className="px-6 py-3 text-gray-500">{pct}%</td>
-                              <td className="px-6 py-3 no-print">
-                                <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                  <div
-                                    className="bg-primary-500 h-1.5 rounded-full transition-all"
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
+                      {[...report.pipeline].sort((a, b) => b.count - a.count).map((row) => {
+                        const pct = report.summary.total_referrals > 0
+                          ? Math.round((row.count / report.summary.total_referrals) * 100) : 0
+                        return (
+                          <tr key={row.status} className="hover:bg-gray-50">
+                            <td className="px-6 py-3">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600'}`}>
+                                {STATUS_LABELS[row.status] || row.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3 text-gray-700 font-medium">{row.count}</td>
+                            <td className="px-6 py-3 text-gray-500">{pct}%</td>
+                            <td className="px-6 py-3">
+                              <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                <div className="bg-primary-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 )}

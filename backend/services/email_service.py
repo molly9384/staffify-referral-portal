@@ -15,6 +15,61 @@ BRAND_COLOR = "#1abde1"
 
 # ─── Core send helper ─────────────────────────────────────────────────────────
 
+async def send_email_with_attachment(
+    to: list[str],
+    subject: str,
+    html: str,
+    attachment_data: bytes,
+    attachment_filename: str,
+) -> None:
+    """Send an HTML email with a PDF attachment via Gmail SMTP."""
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders as email_encoders
+
+    if not settings.GMAIL_USER or not settings.GMAIL_APP_PASSWORD:
+        return
+    if not to:
+        return
+
+    _subst = {'\u2014': '-', '\u2013': '-', '\u2019': "'", '\u2018': "'",
+              '\u201c': '"', '\u201d': '"', '\u2026': '...', '\xa0': ' '}
+    subject_clean = subject
+    for ch, rep in _subst.items():
+        subject_clean = subject_clean.replace(ch, rep)
+    subject_safe = subject_clean.encode("ascii", "ignore").decode("ascii")
+    html_safe = html.encode("ascii", "xmlcharrefreplace").decode("ascii")
+
+    gmail_user = settings.GMAIL_USER.strip()
+    gmail_password = "".join(settings.GMAIL_APP_PASSWORD.split())
+
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = subject_safe
+    msg["From"] = f"Staffify <{gmail_user}>"
+    msg["To"] = ", ".join(a.strip() for a in to)
+    msg.attach(MIMEText(html_safe, "html", "us-ascii"))
+
+    pdf_part = MIMEBase("application", "octet-stream")
+    pdf_part.set_payload(attachment_data)
+    email_encoders.encode_base64(pdf_part)
+    pdf_part.add_header("Content-Disposition", "attachment", filename=attachment_filename)
+    msg.attach(pdf_part)
+
+    def _send():
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(gmail_user, gmail_password)
+            server.send_message(msg)
+
+    try:
+        await asyncio.to_thread(_send)
+    except Exception as e:
+        import traceback
+        print(f"[email] Failed to send '{subject}' with attachment to {to}: {e}")
+        print(f"[email] Traceback:\n{traceback.format_exc()}")
+
+
 async def send_email(to: list[str], subject: str, html: str) -> None:
     """Send an HTML email via Gmail SMTP. Silently swallows errors."""
     if not settings.GMAIL_USER or not settings.GMAIL_APP_PASSWORD:

@@ -202,6 +202,9 @@ export const getAdminReport = (params) =>
 export const getClientReport = (params) =>
   apiClient.get('/reports/client', { params }).then((r) => r.data)
 
+export const sendReportEmail = (data) =>
+  apiClient.post('/reports/send-email', data).then((r) => r.data)
+
 // ---- QBO ----
 
 export const getQBOStatus = () =>

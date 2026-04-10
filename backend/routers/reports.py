@@ -1,28 +1,73 @@
+import base64
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from auth import get_current_active_user, require_admin
 from models import Referral, CreditLedger, Client, User, ReferralStatus, CreditStatus
+from services.email_service import send_email_with_attachment
+
+
+class ReportEmailRequest(BaseModel):
+    email: str
+    subject: str
+    filename: str
+    pdf_base64: str
 
 router = APIRouter()
 
 ACTIVE_STATUSES = [ReferralStatus.va_billing, ReferralStatus.active]
 
 
+@router.post("/send-email")
+async def send_report_email(
+    request: ReportEmailRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Receive a base64-encoded PDF from the frontend and email it as an attachment."""
+    try:
+        pdf_bytes = base64.b64decode(request.pdf_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid PDF data.")
+
+    from config import settings
+    logo_url = f"{settings.FRONTEND_URL}/logo.png"
+    html = f"""
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#333;">
+      <img src="{logo_url}" alt="Staffify" style="height:40px;margin-bottom:24px;" />
+      <h2 style="font-size:18px;margin:0 0 12px;color:#111;">Your Staffify Report</h2>
+      <p style="margin:0 0 12px;">Please find your referral report attached to this email.</p>
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0 16px;" />
+      <p style="color:#aaa;font-size:12px;margin:0;">Staffify LLC &middot; Referral Portal</p>
+    </div>
+    """
+    await send_email_with_attachment(
+        to=[request.email],
+        subject=request.subject,
+        html=html,
+        attachment_data=pdf_bytes,
+        attachment_filename=request.filename,
+    )
+    return {"ok": True}
+
+
 @router.get("/admin")
 async def get_admin_report(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    client_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     # Referral filters
     ref_filters = [Referral.is_active == True]
+    if client_id:
+        ref_filters.append(Referral.referring_client_id == client_id)
     if start_date:
         ref_filters.append(Referral.referral_date >= start_date)
     if end_date:
@@ -137,6 +182,7 @@ async def get_admin_report(
             "start": start_date.isoformat() if start_date else None,
             "end": end_date.isoformat() if end_date else None,
         },
+        "filtered_client_id": client_id,
     }
 
 
