@@ -1,6 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 const navItems = [
   {
@@ -62,6 +62,13 @@ const navItems = [
 export default function ClientLayout() {
   const { user, logout, isImpersonating, stopImpersonation } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Close sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
 
   const handleLogout = () => {
     logout()
@@ -73,6 +80,60 @@ export default function ClientLayout() {
     navigate('/internal/portal-users')
   }, [stopImpersonation, navigate])
 
+  const sidebarContent = (
+    <>
+      <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200">
+        <img src="/logo.png" alt="Staffify" className="h-6" />
+        <div>
+          <p className="text-xs text-gray-500">Client Portal</p>
+        </div>
+      </div>
+
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/client/dashboard'}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-primary-50 text-primary-700'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`
+            }
+          >
+            {item.icon}
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="px-4 py-4 border-t border-gray-200">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+            <span className="text-primary-700 text-sm font-medium">
+              {user?.full_name?.charAt(0)?.toUpperCase() ?? 'U'}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">{user?.full_name}</p>
+            <p className="text-xs text-gray-500">Client</p>
+          </div>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Sign out
+        </button>
+      </div>
+    </>
+  )
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       {/* Impersonation banner */}
@@ -83,75 +144,67 @@ export default function ClientLayout() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
-            Viewing as <strong>{user?.full_name}</strong> — this is a preview of their portal.
+            <span>Viewing as <strong>{user?.full_name}</strong> — preview of their portal.</span>
           </div>
           <button
             onClick={handleExitView}
-            className="ml-4 px-3 py-1 rounded-md bg-amber-950/10 hover:bg-amber-950/20 text-amber-950 text-xs font-semibold transition-colors"
+            className="ml-4 px-3 py-1 rounded-md bg-amber-950/10 hover:bg-amber-950/20 text-amber-950 text-xs font-semibold transition-colors whitespace-nowrap"
           >
             Exit View
           </button>
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 flex-shrink-0 flex flex-col bg-white border-r border-gray-200">
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200">
-          <img src="/logo.png" alt="Staffify" className="h-6" />
-          <div>
-            <p className="text-xs text-gray-500">Client Portal</p>
-          </div>
-        </div>
+      <div className="flex flex-1 overflow-hidden min-h-0">
+        {/* ── Mobile overlay ── */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/client/dashboard'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`
-              }
+        {/* ── Sidebar ── */}
+        <aside
+          className={`
+            fixed inset-y-0 left-0 z-50 w-64 flex flex-col bg-white border-r border-gray-200
+            transform transition-transform duration-200 ease-in-out
+            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+            md:relative md:translate-x-0 md:flex-shrink-0
+          `}
+        >
+          {sidebarContent}
+        </aside>
+
+        {/* ── Right side: mobile top bar + main content ── */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {/* Mobile top bar */}
+          <header className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 flex-shrink-0">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              aria-label="Open menu"
             >
-              {item.icon}
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
 
-        <div className="px-4 py-4 border-t border-gray-200">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+            <img src="/logo.png" alt="Staffify" className="h-6" />
+
+            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
               <span className="text-primary-700 text-sm font-medium">
                 {user?.full_name?.charAt(0)?.toUpperCase() ?? 'U'}
               </span>
             </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{user?.full_name}</p>
-              <p className="text-xs text-gray-500">Client</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Sign out
-          </button>
-        </div>
-      </aside>
+          </header>
 
-      <main className="flex-1 overflow-auto">
-        <Outlet />
-      </main>
-    </div>
+          {/* Main content */}
+          <main className="flex-1 overflow-auto">
+            <Outlet />
+          </main>
+        </div>
+      </div>
     </div>
   )
 }

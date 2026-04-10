@@ -47,7 +47,7 @@ export default function NewReferral() {
   }
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-4 sm:p-8 max-w-2xl">
       <div className="mb-8">
         <Link to="/client/referrals" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-4">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

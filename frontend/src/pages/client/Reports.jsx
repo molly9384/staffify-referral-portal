@@ -183,14 +183,14 @@ export default function ClientReports() {
         />
       )}
 
-      <div className="p-8 max-w-4xl">
+      <div className="p-4 sm:p-8 max-w-4xl">
         {/* Header */}
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">My Reports</h1>
             <p className="text-gray-500 text-sm mt-1">View your referral activity and credit history.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
               onClick={() => { setEmailSent(false); setEmailError(''); setShowEmailModal(true) }}
               disabled={!report || loading}

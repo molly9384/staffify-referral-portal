@@ -58,7 +58,7 @@ export default function ClientSettings() {
   }
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-4 sm:p-8 max-w-2xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Account Settings</h1>
         <p className="text-gray-500 text-sm mt-1">Update your portal login details.</p>

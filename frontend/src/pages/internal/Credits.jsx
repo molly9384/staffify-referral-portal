@@ -193,7 +193,7 @@ export default function Credits() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-8 space-y-6">
       {editingCredit && (
         <EditCreditModal
           credit={editingCredit}
@@ -206,13 +206,13 @@ export default function Credits() {
         />
       )}
 
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Credits</h1>
           <p className="text-gray-500 text-sm mt-1">Manage referral credit accrual and QBO application.</p>
         </div>
         {isOwner && (
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 self-start sm:self-auto">
             <button onClick={handleRunAutomation} disabled={automationRunning} className="btn-secondary">
               {automationRunning ? (
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">

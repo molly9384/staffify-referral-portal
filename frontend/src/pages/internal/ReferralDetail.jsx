@@ -206,7 +206,7 @@ export default function ReferralDetail() {
 
   if (loading) {
     return (
-      <div className="p-8 space-y-5">
+      <div className="p-4 sm:p-8 space-y-5">
         <div className="h-8 bg-gray-100 rounded w-48 animate-pulse" />
         <div className="h-32 bg-gray-100 rounded-xl animate-pulse" />
         <div className="h-48 bg-gray-100 rounded-xl animate-pulse" />
@@ -216,7 +216,7 @@ export default function ReferralDetail() {
 
   if (!referral) {
     return (
-      <div className="p-8 text-center">
+      <div className="p-4 sm:p-8 text-center">
         <p className="text-gray-500">Referral not found.</p>
         <Link to="/internal/referrals" className="text-primary-600 hover:underline text-sm mt-2 inline-block">Back to Referrals</Link>
       </div>
@@ -227,9 +227,9 @@ export default function ReferralDetail() {
   const eligibleVA = referral.virtual_assistants?.find((v) => v.is_eligible && v.is_active)
 
   return (
-    <div className="p-8 space-y-6 max-w-5xl">
+    <div className="p-4 sm:p-8 space-y-6 max-w-5xl">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div>
           <Link to="/internal/referrals" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -237,13 +237,13 @@ export default function ReferralDetail() {
             </svg>
             Back to Referrals
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold text-gray-900">{referral.referred_name}</h1>
             <span className={`badge ${badge.className}`}>{badge.label}</span>
           </div>
           {referral.referred_email && <p className="text-gray-500 text-sm mt-0.5">{referral.referred_email}</p>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 self-start sm:self-auto">
           <button onClick={openEditModal} className="btn-secondary">
             Edit Details
           </button>
