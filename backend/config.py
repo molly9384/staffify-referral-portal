@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    CRON_SECRET: str = ""  # Shared secret for external cron trigger endpoint
+
     SLACK_WEBHOOK_URL: str = ""
     GMAIL_USER: str = ""
     GMAIL_APP_PASSWORD: str = ""

@@ -2,13 +2,14 @@ import uuid
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 
 from auth import get_current_active_user, require_admin, require_admin_only, require_owner
+from config import settings
 from database import get_db
 from models import CreditLedger, Referral, User, UserRole, CreditStatus
 from schemas import CreditLedgerOut, CreditSummary, MessageResponse
@@ -134,6 +135,46 @@ async def run_credit_automation(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Automation failed: {str(e)}")
+
+
+@router.post("/cron-trigger", response_model=MessageResponse)
+async def cron_trigger(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    External cron endpoint — no user auth required.
+    Protected by a shared secret passed in the X-Cron-Secret header.
+    Call this from cron-job.org (or any external scheduler) every other Friday at 7 AM ET.
+    """
+    if not settings.CRON_SECRET:
+        raise HTTPException(status_code=503, detail="Cron trigger not configured (CRON_SECRET not set)")
+
+    incoming = request.headers.get("X-Cron-Secret", "")
+    if not incoming or incoming != settings.CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid or missing cron secret")
+
+    try:
+        from services.credit_service import CreditService
+        service = CreditService(db)
+
+        expired = await service.check_and_expire_referrals()
+        calc = await service.process_bi_weekly_credits()
+        promoted = await service.promote_eligible_credits()
+        apply = await service.apply_pending_credits_to_invoices()
+        await db.commit()
+
+        return MessageResponse(
+            message="Bi-weekly credit automation completed",
+            detail=(
+                f"Expired: {expired} referrals | "
+                f"Credits created: {calc['credits_created']} (${calc['total_amount']:.2f}) | "
+                f"Promoted to eligible: {promoted} | "
+                f"Applied to QBO: {apply['applied']} (${apply['total_applied']:.2f})"
+            ),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cron automation failed: {str(e)}")
 
 
 @router.put("/{credit_id}", response_model=CreditLedgerOut)
