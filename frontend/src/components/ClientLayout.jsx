@@ -85,7 +85,7 @@ export default function ClientLayout() {
       <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200">
         <img src="/logo.png" alt="Staffify" className="h-6" />
         <div>
-          <p className="text-xs text-gray-500">Client Portal</p>
+          <p className="text-xs text-gray-500">Referral Portal</p>
         </div>
       </div>
 

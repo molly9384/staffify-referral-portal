@@ -40,7 +40,7 @@ async def send_report_email(
     html = f"""
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#333;">
       <img src="{logo_url}" alt="Staffify" style="height:40px;margin-bottom:24px;" />
-      <h2 style="font-size:18px;margin:0 0 12px;color:#111;">Your Staffify Report</h2>
+      <h2 style="font-size:18px;margin:0 0 12px;color:#111;">Your Staffify Referral Report Is Ready! &#127881;</h2>
       <p style="margin:0 0 12px;">Please find your referral report attached to this email.</p>
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0 16px;" />
       <p style="color:#aaa;font-size:12px;margin:0;">Staffify LLC &middot; Referral Portal</p>
