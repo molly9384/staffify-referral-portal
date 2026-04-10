@@ -164,6 +164,88 @@ async def impersonate_user(
     )
 
 
+@router.post("/test-email")
+async def send_test_email(
+    email_type: str,
+    current_user: User = Depends(require_admin_only),
+):
+    """Send a test version of any system email to the current user's address."""
+    from decimal import Decimal
+    from services.email_service import (
+        send_email,
+        email_referral_confirmation,
+        email_welcome_self_registered,
+        email_welcome_admin_created,
+        email_referral_active,
+        email_referral_paused,
+        email_referral_reinstated,
+        email_pending_credits_statement,
+        email_applied_credits_statement,
+        email_invite,
+    )
+
+    dummy_credits = [
+        {"referred_name": "Acme Corp", "period": "Mar 17 – Mar 31, 2026", "amount": Decimal("12.50")},
+        {"referred_name": "Blue Ocean LLC", "period": "Mar 17 – Mar 31, 2026", "amount": Decimal("8.00")},
+    ]
+
+    templates = {
+        "referral_confirmation": lambda: email_referral_confirmation(
+            referring_client_name=current_user.full_name,
+            referred_name="Acme Corp",
+        ),
+        "welcome_self_registered": lambda: email_welcome_self_registered(
+            full_name=current_user.full_name,
+            email=current_user.email,
+        ),
+        "welcome_admin_created": lambda: email_welcome_admin_created(
+            full_name=current_user.full_name,
+            email=current_user.email,
+        ),
+        "referral_active": lambda: email_referral_active(
+            referring_client_name=current_user.full_name,
+            referred_name="Acme Corp",
+            activation_date="April 9, 2026",
+        ),
+        "referral_paused": lambda: email_referral_paused(
+            referring_client_name=current_user.full_name,
+            referred_name="Acme Corp",
+            reason="VA contract has ended.",
+        ),
+        "referral_reinstated": lambda: email_referral_reinstated(
+            referring_client_name=current_user.full_name,
+            referred_name="Acme Corp",
+        ),
+        "pending_credits": lambda: email_pending_credits_statement(
+            referring_client_name=current_user.full_name,
+            credits=dummy_credits,
+            total=Decimal("20.50"),
+        ),
+        "applied_credits": lambda: email_applied_credits_statement(
+            referring_client_name=current_user.full_name,
+            credits=dummy_credits,
+            total=Decimal("20.50"),
+        ),
+        "invite": lambda: email_invite(
+            invitee_name=current_user.full_name,
+            inviter_name="Staffify",
+            role="client",
+            invite_url=f"{settings.FRONTEND_URL}/#/accept-invite?token=test-preview-token",
+        ),
+    }
+
+    if email_type not in templates:
+        raise HTTPException(status_code=400, detail=f"Unknown email type: {email_type}")
+
+    try:
+        subject, html = templates[email_type]()
+        subject = f"[TEST] {subject}"
+        await send_email([current_user.email], subject, html)
+        return {"message": f"Test email sent to {current_user.email}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send test email: {str(e)}")
+
+
 @router.post("/promote-owner")
 async def promote_owner(setup_key: str, email: str, db: AsyncSession = Depends(get_db)):
     """One-time endpoint to promote a user to owner role. Requires ADMIN_SETUP_KEY env var."""

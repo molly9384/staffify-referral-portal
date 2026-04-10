@@ -3,6 +3,18 @@ import { useAuth } from '../../context/AuthContext'
 import { changePassword, updateProfile } from '../../api/client'
 import apiClient from '../../api/client'
 
+const TEST_EMAILS = [
+  { type: 'referral_confirmation', label: 'Referral Confirmation', desc: 'Sent to a client when they submit a referral.' },
+  { type: 'welcome_self_registered', label: 'Welcome (Self-Registered)', desc: 'Sent when a client creates their own account.' },
+  { type: 'welcome_admin_created', label: 'Welcome (Admin-Created)', desc: 'Sent when you create an account for a client.' },
+  { type: 'referral_active', label: 'Referral Active', desc: 'Sent when a referral starts generating credits.' },
+  { type: 'referral_paused', label: 'Referral Paused', desc: 'Sent when a referral is paused.' },
+  { type: 'referral_reinstated', label: 'Referral Reinstated', desc: 'Sent when a paused referral becomes active again.' },
+  { type: 'pending_credits', label: 'Pending Credits Statement', desc: 'Bi-weekly statement of new pending credits.' },
+  { type: 'applied_credits', label: 'Applied Credits Statement', desc: 'Sent when credits are applied to an invoice.' },
+  { type: 'invite', label: 'User Invitation', desc: 'Sent when you invite someone to the portal.' },
+]
+
 export default function Settings() {
   const { user, refreshUser } = useAuth()
 
@@ -64,6 +76,23 @@ export default function Settings() {
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileSuccess, setProfileSuccess] = useState('')
   const [profileError, setProfileError] = useState('')
+
+  // Test email state
+  const [testEmailSending, setTestEmailSending] = useState(null)
+  const [testEmailResults, setTestEmailResults] = useState({}) // type → 'sent' | 'error'
+
+  const handleSendTestEmail = async (type) => {
+    setTestEmailSending(type)
+    setTestEmailResults((prev) => ({ ...prev, [type]: null }))
+    try {
+      await apiClient.post(`/auth/test-email?email_type=${type}`)
+      setTestEmailResults((prev) => ({ ...prev, [type]: 'sent' }))
+    } catch {
+      setTestEmailResults((prev) => ({ ...prev, [type]: 'error' }))
+    } finally {
+      setTestEmailSending(null)
+    }
+  }
 
   // Password state
   const [currentPassword, setCurrentPassword] = useState('')
@@ -237,6 +266,57 @@ export default function Settings() {
                   Connect QuickBooks
                 </a>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Test Emails Card */}
+      {(user?.role === 'admin' || user?.role === 'owner') && (
+        <div className="card mb-6">
+          <div className="card-header">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Test Emails</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Sends a test copy to <strong>{user?.email}</strong> with a [TEST] prefix in the subject.</p>
+            </div>
+          </div>
+          <div className="card-body">
+            <div className="space-y-2">
+              {TEST_EMAILS.map((item) => {
+                const result = testEmailResults[item.type]
+                const sending = testEmailSending === item.type
+                return (
+                  <div key={item.type} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{item.label}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                      {result === 'sent' && (
+                        <span className="text-xs text-green-600 font-medium">Sent ✓</span>
+                      )}
+                      {result === 'error' && (
+                        <span className="text-xs text-red-500 font-medium">Failed</span>
+                      )}
+                      <button
+                        onClick={() => handleSendTestEmail(item.type)}
+                        disabled={!!testEmailSending}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50"
+                      >
+                        {sending ? (
+                          <>
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Sending…
+                          </>
+                        ) : 'Send Test'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
