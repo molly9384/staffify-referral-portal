@@ -27,37 +27,6 @@ function fmtDate(str) {
   })
 }
 
-// ─── Font loader ──────────────────────────────────────────────────────────────
-
-async function loadMontserrat(doc) {
-  try {
-    const [regRes, boldRes] = await Promise.all([
-      fetch('/Montserrat-Regular.ttf'),
-      fetch('/Montserrat-Bold.ttf'),
-    ])
-    if (!regRes.ok || !boldRes.ok) return false
-
-    const toBase64 = async (res) => {
-      const buf = await res.arrayBuffer()
-      const bytes = new Uint8Array(buf)
-      let binary = ''
-      const chunk = 8192
-      for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
-      }
-      return btoa(binary)
-    }
-
-    const [regB64, boldB64] = await Promise.all([toBase64(regRes), toBase64(boldRes)])
-    doc.addFileToVFS('Montserrat-Regular.ttf', regB64)
-    doc.addFont('Montserrat-Regular.ttf', 'Montserrat', 'normal')
-    doc.addFileToVFS('Montserrat-Bold.ttf', boldB64)
-    doc.addFont('Montserrat-Bold.ttf', 'Montserrat', 'bold')
-    return true
-  } catch {
-    return false
-  }
-}
 
 // ─── Logo loader ──────────────────────────────────────────────────────────────
 
@@ -81,8 +50,7 @@ async function loadLogo() {
 
 async function createDoc() {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const hasMontserrat = await loadMontserrat(doc)
-  const font = hasMontserrat ? 'Montserrat' : 'helvetica'
+  const font = 'helvetica'
   const logo = await loadLogo()
   return { doc, font, logo }
 }
