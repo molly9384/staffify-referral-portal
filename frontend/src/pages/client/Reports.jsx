@@ -95,6 +95,7 @@ export default function ClientReports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState('')
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [emailSending, setEmailSending] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
@@ -136,9 +137,13 @@ export default function ClientReports() {
   const handleDownloadPDF = async () => {
     if (!report) return
     setPdfLoading(true)
+    setPdfError('')
     try {
       const doc = await generateClientReportPDF(report, dateRangeLabel, user?.full_name || 'Client')
       doc.save(`staffify-my-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+    } catch (err) {
+      console.error('PDF generation failed:', err)
+      setPdfError('PDF generation failed: ' + (err?.message || 'Unknown error'))
     } finally {
       setPdfLoading(false)
     }
@@ -208,6 +213,9 @@ export default function ClientReports() {
             </button>
           </div>
         </div>
+        {pdfError && (
+          <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{pdfError}</div>
+        )}
 
         {/* Date filter */}
         <form onSubmit={handleApply} className="flex flex-wrap items-end gap-3 mb-6">
