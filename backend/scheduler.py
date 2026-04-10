@@ -51,7 +51,8 @@ async def run_biweekly_credit_job():
             apply_result = await service.apply_pending_credits_to_invoices()
             logger.info(
                 f"Credit application complete: applied={apply_result['applied']}, "
-                f"total_applied=${apply_result['total_applied']:.2f}"
+                f"total_applied=${apply_result['total_applied']:.2f}, "
+                f"voided_excess=${apply_result.get('voided_excess', 0):.2f}"
             )
 
             await db.commit()

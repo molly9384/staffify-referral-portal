@@ -164,6 +164,7 @@ async def cron_trigger(
         apply = await service.apply_pending_credits_to_invoices()
         await db.commit()
 
+        voided = apply.get('voided_excess', 0)
         return MessageResponse(
             message="Bi-weekly credit automation completed",
             detail=(
@@ -171,6 +172,7 @@ async def cron_trigger(
                 f"Credits created: {calc['credits_created']} (${calc['total_amount']:.2f}) | "
                 f"Promoted to eligible: {promoted} | "
                 f"Applied to QBO: {apply['applied']} (${apply['total_applied']:.2f})"
+                + (f" | Voided excess: ${voided:.2f}" if voided else "")
             ),
         )
     except Exception as e:
@@ -317,9 +319,11 @@ async def apply_pending_credits(
         from services.credit_service import CreditService
         service = CreditService(db)
         result = await service.apply_pending_credits_to_invoices()
+        voided = result.get('voided_excess', 0)
         return MessageResponse(
             message="Credits applied to invoices successfully",
-            detail=f"Applied {result['applied']} credits totaling ${result['total_applied']:.2f}",
+            detail=f"Applied {result['applied']} credits totaling ${result['total_applied']:.2f}"
+                   + (f" — ${voided:.2f} voided (exceeded invoice balance)" if voided else ""),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Apply credits failed: {str(e)}")

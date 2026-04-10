@@ -396,13 +396,15 @@ class CreditService:
     async def apply_pending_credits_to_invoices(self) -> dict:
         """
         Apply eligible credits to QBO invoices for the referring client.
-        Only credits in 'eligible' status (Hubstaff invoice paid) are applied.
-        Credits go to the referring client's oldest open QBO invoice.
+        Rules:
+        - Only one credit per referral per QBO invoice (no stacking same referral)
+        - Multiple credits from different referrals for the same client CAN stack
+        - Credits can never exceed the invoice balance; any excess is voided and
+          total_credits_earned is adjusted down to reflect the true earned amount
+        - Running invoice balance is tracked within the run so multiple credits
+          applied to the same invoice in one pass never over-apply
         """
-        from services.hubstaff_service import HubstaffService
         from services.qbo_service import QBOService
-
-        hubstaff = HubstaffService()
         qbo = QBOService()
 
         if not qbo.is_connected():
@@ -421,14 +423,16 @@ class CreditService:
 
         applied = 0
         skipped = 0
+        voided_excess = Decimal("0.00")
         total_applied = Decimal("0.00")
-        client_applied: dict = {}  # client_id → {name, credits[], total}
+        client_applied: dict = {}
+
+        # Track remaining balance per QBO invoice within this run so that
+        # multiple credits stacking on the same invoice don't over-apply
+        invoice_balance_remaining: dict[str, Decimal] = {}
 
         for credit in pending_credits:
             try:
-                # Hubstaff invoices stay as Draft (payment tracked in QBO via Make automation)
-                # so we do not gate on Hubstaff invoice status here
-
                 referring_client = credit.referral.referring_client
                 if not referring_client or not referring_client.qbo_customer_id:
                     credit.notes = (
@@ -447,34 +451,72 @@ class CreditService:
 
                 invoice_qbo = open_invoices[0]
                 invoice_id = invoice_qbo.get("Id")
-                invoice_balance = Decimal(str(invoice_qbo.get("Balance", 0)))
 
-                if invoice_balance <= 0:
+                # Initialise running balance for this invoice on first encounter
+                if invoice_id not in invoice_balance_remaining:
+                    invoice_balance_remaining[invoice_id] = Decimal(str(invoice_qbo.get("Balance", 0)))
+
+                remaining_balance = invoice_balance_remaining[invoice_id]
+                if remaining_balance <= 0:
                     credit.notes = (
-                        (credit.notes or "") + " [Skipped: QBO invoice balance is zero]"
+                        (credit.notes or "") + " [Skipped: QBO invoice balance exhausted]"
                     ).strip()
                     skipped += 1
                     continue
 
-                apply_amount = min(credit.credit_amount, invoice_balance)
+                # Only one credit per referral per QBO invoice — prevent stacking
+                dup_check = await self.db.execute(
+                    select(CreditLedger).where(
+                        CreditLedger.referral_id == credit.referral_id,
+                        CreditLedger.qbo_invoice_id == invoice_id,
+                        CreditLedger.status == CreditStatus.applied,
+                    )
+                )
+                if dup_check.scalar_one_or_none():
+                    credit.notes = (
+                        (credit.notes or "") + " [Skipped: credit for this referral already applied to this invoice]"
+                    ).strip()
+                    skipped += 1
+                    continue
+
+                original_amount = Decimal(str(credit.credit_amount))
+                apply_amount = min(original_amount, remaining_balance)
 
                 description = (
                     f"Staffify Referral Credit - {credit.referral.referred_name}"
                     + (f" | Invoice #{credit.hubstaff_invoice_number}" if credit.hubstaff_invoice_number else "")
                 )
-
                 await qbo.apply_credit_to_invoice(invoice_id, float(apply_amount), description)
 
+                # Update credit record
                 credit.status = CreditStatus.applied
                 credit.qbo_invoice_id = invoice_id
                 credit.applied_date = date.today()
                 credit.credit_amount = apply_amount
 
+                # Deduct from the running balance for this invoice
+                invoice_balance_remaining[invoice_id] -= apply_amount
+
+                # Fetch referral once to update both earned and applied totals
                 referral_result = await self.db.execute(
                     select(Referral).where(Referral.id == credit.referral_id)
                 )
                 referral = referral_result.scalar_one_or_none()
                 if referral:
+                    excess = original_amount - apply_amount
+                    if excess > 0:
+                        # Void the excess: it never counts as earned per program policy
+                        referral.total_credits_earned = max(
+                            Decimal("0"),
+                            Decimal(str(referral.total_credits_earned)) - excess,
+                        )
+                        credit.notes = (
+                            (credit.notes or "")
+                            + f" [${excess:.2f} voided — exceeded invoice balance per program policy]"
+                        ).strip()
+                        voided_excess += excess
+                        print(f"[DEBUG apply] credit {credit.id}: capped ${original_amount} → ${apply_amount}, voided ${excess}")
+
                     referral.total_credits_applied = (
                         Decimal(str(referral.total_credits_applied)) + apply_amount
                     )
@@ -528,6 +570,7 @@ class CreditService:
         return {
             "applied": applied,
             "skipped": skipped,
+            "voided_excess": float(voided_excess),
             "total_applied": float(total_applied),
         }
 
