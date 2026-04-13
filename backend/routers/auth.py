@@ -234,6 +234,42 @@ async def send_test_email(
         ),
     }
 
+    if email_type == "report":
+        # Report email always includes a PDF attachment — send with a placeholder PDF
+        from services.email_service import send_email_with_attachment
+        from routers.reports import send_report_email as _report_route
+        from config import settings as _s
+        logo_url = f"{_s.FRONTEND_URL}/logo.png"
+        html = f"""
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#333;">
+          <img src="{logo_url}" alt="Staffify" style="height:40px;margin-bottom:24px;" />
+          <h2 style="font-size:18px;margin:0 0 12px;color:#111;">Your Staffify Referral Report Is Ready! &#127881;</h2>
+          <p style="margin:0 0 12px;">Please find your referral report attached to this email.</p>
+          <hr style="border:none;border-top:1px solid #eee;margin:24px 0 16px;" />
+          <p style="color:#aaa;font-size:12px;margin:0;">Staffify LLC &middot; Referral Portal</p>
+        </div>
+        """
+        # Minimal valid PDF as placeholder attachment
+        placeholder_pdf = (
+            b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj "
+            b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj "
+            b"3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj "
+            b"xref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n"
+            b"0000000058 00000 n\n0000000115 00000 n\n"
+            b"trailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF"
+        )
+        try:
+            await send_email_with_attachment(
+                to=[current_user.email],
+                subject="[TEST] Your Staffify Referral Report Is Ready! 🎉",
+                html=html,
+                attachment_data=placeholder_pdf,
+                attachment_filename="staffify-report-test.pdf",
+            )
+            return {"message": f"Test report email sent to {current_user.email}"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to send test email: {str(e)}")
+
     if email_type not in templates:
         raise HTTPException(status_code=400, detail=f"Unknown email type: {email_type}")
 

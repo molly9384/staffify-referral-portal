@@ -13,6 +13,7 @@ const TEST_EMAILS = [
   { type: 'pending_credits', label: 'Pending Credits Statement', desc: 'Bi-weekly statement of new pending credits.' },
   { type: 'applied_credits', label: 'Applied Credits Statement', desc: 'Sent when credits are applied to an invoice.' },
   { type: 'invite', label: 'User Invitation', desc: 'Sent when you invite someone to the portal.' },
+  { type: 'report', label: 'Referral Report', desc: 'Sent when a report is emailed from the Reports page.' },
 ]
 
 export default function Settings() {
