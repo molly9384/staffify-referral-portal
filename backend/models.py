@@ -160,8 +160,8 @@ class CreditLedger(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    referral: Mapped["Referral"] = relationship("Referral", back_populates="credit_ledger")
-    va: Mapped["VirtualAssistant"] = relationship("VirtualAssistant", back_populates="credit_ledger")
+    referral: Mapped["Referral"] = relationship("Referral", back_populates="credit_ledger", lazy="selectin")
+    va: Mapped["VirtualAssistant"] = relationship("VirtualAssistant", back_populates="credit_ledger", lazy="selectin")
 
 
 class HubstaffEvent(Base):
