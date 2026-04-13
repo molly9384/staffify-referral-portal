@@ -255,13 +255,13 @@ export default function AdminReports() {
         )}
 
         {/* Filters */}
-        <form onSubmit={handleApply} className="flex flex-wrap items-end gap-3 mb-6">
+        <form onSubmit={handleApply} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3 mb-6">
           <div>
             <label className="label">Client</label>
             <select
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              className="input"
+              className="input w-full sm:w-auto"
             >
               <option value="">All Clients</option>
               {clients.map((c) => (
@@ -271,15 +271,15 @@ export default function AdminReports() {
           </div>
           <div>
             <label className="label">Start Date</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input" />
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input w-full sm:w-auto" />
           </div>
           <div>
             <label className="label">End Date</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="input" />
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="input w-full sm:w-auto" />
           </div>
-          <button type="submit" className="btn-primary">Apply</button>
+          <button type="submit" className="btn-primary w-full sm:w-auto">Apply</button>
           {(startDate || endDate || clientId) && (
-            <button type="button" onClick={handleClear} className="text-sm text-gray-500 hover:text-gray-700 underline">Clear</button>
+            <button type="button" onClick={handleClear} className="text-sm text-gray-500 hover:text-gray-700 underline self-center sm:self-auto">Clear</button>
           )}
         </form>
 
