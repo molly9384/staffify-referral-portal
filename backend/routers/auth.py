@@ -425,6 +425,26 @@ async def register_client(request: ClientRegisterRequest, db: AsyncSession = Dep
     except Exception as e:
         print(f"Welcome email failed: {e}")
 
+    # Admin notification
+    if settings.ADMIN_EMAIL:
+        recipients = [e.strip() for e in settings.ADMIN_EMAIL.split(",") if e.strip()]
+        try:
+            import asyncio
+            from services.email_service import send_email
+            html_body = (
+                f"<p style='margin:0 0 16px;'>A new client has created a portal account.</p>"
+                f"<table style='border-collapse:collapse;font-size:14px;'>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Name</td><td style='padding:4px 0;'><strong>{new_user.full_name}</strong></td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Email</td><td style='padding:4px 0;'>{new_user.email}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Client</td><td style='padding:4px 0;'>{client.name}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Sign-up Method</td><td style='padding:4px 0;'>Email / Password</td></tr>"
+                f"</table>"
+                f"<p style='margin-top:20px;'><a href='{settings.FRONTEND_URL}' style='color:#1abde1;'>View in Admin Portal</a></p>"
+            )
+            asyncio.create_task(send_email(recipients, f"New Portal Signup: {new_user.full_name}", html_body))
+        except Exception as e:
+            print(f"Admin signup notification failed: {e}")
+
     return new_user
 
 
@@ -736,6 +756,25 @@ async def google_callback(code: str = None, error: str = None, db: AsyncSession 
         await db.flush()
         await db.commit()
         await db.refresh(user)
+
+        # Admin notification for Google signup
+        if settings.ADMIN_EMAIL:
+            recipients = [e.strip() for e in settings.ADMIN_EMAIL.split(",") if e.strip()]
+            try:
+                from services.email_service import send_email
+                html_body = (
+                    f"<p style='margin:0 0 16px;'>A new client has created a portal account.</p>"
+                    f"<table style='border-collapse:collapse;font-size:14px;'>"
+                    f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Name</td><td style='padding:4px 0;'><strong>{user.full_name}</strong></td></tr>"
+                    f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Email</td><td style='padding:4px 0;'>{user.email}</td></tr>"
+                    f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Client</td><td style='padding:4px 0;'>{client.name}</td></tr>"
+                    f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Sign-up Method</td><td style='padding:4px 0;'>Google</td></tr>"
+                    f"</table>"
+                    f"<p style='margin-top:20px;'><a href='{settings.FRONTEND_URL}' style='color:#1abde1;'>View in Admin Portal</a></p>"
+                )
+                await send_email(recipients, f"New Portal Signup: {user.full_name}", html_body)
+            except Exception as e:
+                print(f"Admin signup notification failed: {e}")
 
     if not user.is_active:
         return RedirectResponse(url=f"{frontend_url}/#/login?error=google_inactive")
