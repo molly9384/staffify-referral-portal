@@ -86,8 +86,8 @@ export default function ClientDashboard() {
           }
         />
         <StatCard
-          label="Credits Applied"
-          value={summary ? formatCurrency(summary.total_applied) : null}
+          label="Credits Next Invoice"
+          value={summary ? formatCurrency(summary.total_eligible ?? 0) : null}
           loading={loading}
           color="blue"
           icon={
@@ -98,7 +98,7 @@ export default function ClientDashboard() {
         />
         <StatCard
           label="Credits Pending"
-          value={summary ? formatCurrency(Number(summary.total_pending) + Number(summary.total_eligible ?? 0)) : null}
+          value={summary ? formatCurrency(summary.total_pending) : null}
           loading={loading}
           color="amber"
           icon={
