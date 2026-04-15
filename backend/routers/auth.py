@@ -953,16 +953,18 @@ async def assembly_signup(
             except Exception:
                 pass
 
-        if qbo_customer:
-            client = Client(
-                name=qbo_customer["display_name"],
-                email=email,
-                qbo_customer_id=qbo_customer["id"],
-                is_active=True,
+        if not qbo_customer:
+            raise HTTPException(
+                status_code=400,
+                detail="We don't have an account on file for that email. Please contact Staffify at hello@gostaffify.com."
             )
-        else:
-            client = Client(name=request.full_name, email=email, is_active=True)
 
+        client = Client(
+            name=qbo_customer["display_name"],
+            email=email,
+            qbo_customer_id=qbo_customer["id"],
+            is_active=True,
+        )
         db.add(client)
         await db.flush()
 
