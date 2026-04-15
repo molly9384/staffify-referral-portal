@@ -29,7 +29,13 @@ def _send_assembly_notification(assembly_client_id: str | None, title: str, body
     try:
         from services.assembly import send_assembly_notification
         print(f"Sending Assembly notification to {assembly_client_id}: {title}")
-        send_assembly_notification(settings.ASSEMBLY_API_KEY, assembly_client_id, title, body)
+        send_assembly_notification(
+            settings.ASSEMBLY_API_KEY,
+            assembly_client_id,
+            title,
+            body,
+            sender_member_id=settings.ASSEMBLY_MEMBER_ID or None,
+        )
     except Exception as e:
         print(f"Assembly notification failed: {e}")
 

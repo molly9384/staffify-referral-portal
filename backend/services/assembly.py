@@ -22,6 +22,35 @@ from cryptography.hazmat.backends import default_backend
 
 ASSEMBLY_API_BASE = "https://api.assembly.com/v1"
 
+# Cached member ID so we only fetch it once per process
+_cached_member_id: str | None = None
+
+
+def get_assembly_member_id(api_key: str) -> str | None:
+    """
+    Return the first active member ID from the Assembly workspace.
+    Used as senderId for in-product notifications.
+    Result is cached in memory for the lifetime of the process.
+    """
+    global _cached_member_id
+    if _cached_member_id:
+        return _cached_member_id
+    try:
+        response = httpx.get(
+            f"{ASSEMBLY_API_BASE}/members",
+            headers={"X-API-KEY": api_key},
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        members = data if isinstance(data, list) else data.get("data", [])
+        if members:
+            _cached_member_id = str(members[0].get("id") or members[0].get("memberId") or "")
+            return _cached_member_id
+    except Exception as e:
+        print(f"Assembly: could not fetch member ID: {e}")
+    return None
+
 
 def _generate_128_bit_key(api_key: str) -> bytes:
     """
@@ -98,13 +127,23 @@ def send_assembly_notification(
     recipient_client_id: str,
     title: str,
     body: str | None = None,
+    sender_member_id: str | None = None,
 ) -> bool:
     """
     Send an in-product notification to a client inside Assembly.
+    sender_member_id is an internal member ID used as senderId (required by Assembly).
+    If not provided, falls back to auto-fetching the first workspace member.
     Returns True on success, False on failure.
     """
     try:
+        # Resolve senderId — must be an internal member ID, not a client ID
+        sender_id = sender_member_id or get_assembly_member_id(api_key)
+        if not sender_id:
+            print("Assembly notification skipped: could not resolve a senderId (member ID)")
+            return False
+
         payload = {
+            "senderId": sender_id,
             "recipientClientId": recipient_client_id,
             "deliveryTargets": {
                 "inProduct": {

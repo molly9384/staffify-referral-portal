@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
 
     ASSEMBLY_API_KEY: str = ""
+    ASSEMBLY_MEMBER_ID: str = ""  # Internal member ID used as senderId for notifications
 
     BASE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:5173"

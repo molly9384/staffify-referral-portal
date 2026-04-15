@@ -291,6 +291,7 @@ class CreditService:
                                 client.assembly_client_id,
                                 title=f"You've earned ${total:.2f} in referral credits!",
                                 body="Your pending credits have been updated. Check your Referral Rewards portal for details.",
+                                sender_member_id=settings.ASSEMBLY_MEMBER_ID or None,
                             )
                     except Exception as e:
                         print(f"[assembly] Pending credits notification failed: {e}")
@@ -612,6 +613,7 @@ class CreditService:
                                 client.assembly_client_id,
                                 title=f"${total:.2f} in credits applied to your invoice!",
                                 body="Your referral credits have been applied to your latest Staffify invoice.",
+                                sender_member_id=settings.ASSEMBLY_MEMBER_ID or None,
                             )
                     except Exception as e:
                         print(f"[assembly] Applied credits notification failed: {e}")
