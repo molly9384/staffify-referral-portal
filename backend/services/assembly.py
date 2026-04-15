@@ -122,38 +122,33 @@ def get_assembly_client(api_key: str, client_id: str) -> dict:
     return response.json()
 
 
-def send_assembly_notification(
+def send_assembly_message(
     api_key: str,
     recipient_client_id: str,
-    title: str,
-    body: str | None = None,
+    text: str,
     sender_member_id: str | None = None,
 ) -> bool:
     """
-    Send an in-product notification to a client inside Assembly.
-    sender_member_id is an internal member ID used as senderId (required by Assembly).
-    If not provided, falls back to auto-fetching the first workspace member.
+    Send a message to a client via Assembly's Messages API.
+    The message appears in the client's Messages inbox in Assembly.
+
+    sender_member_id must be an internal member ID. If not provided,
+    falls back to auto-fetching the first workspace member.
     Returns True on success, False on failure.
     """
     try:
-        # Resolve senderId — must be an internal member ID, not a client ID
         sender_id = sender_member_id or get_assembly_member_id(api_key)
         if not sender_id:
-            print("Assembly notification skipped: could not resolve a senderId (member ID)")
+            print("Assembly message skipped: could not resolve a senderId (member ID)")
             return False
 
         payload = {
             "senderId": sender_id,
             "recipientClientId": recipient_client_id,
-            "deliveryTargets": {
-                "inProduct": {
-                    "title": title,
-                    **({"body": body} if body else {}),
-                }
-            },
+            "text": text,
         }
         response = httpx.post(
-            f"{ASSEMBLY_API_BASE}/notifications",
+            f"{ASSEMBLY_API_BASE}/messages",
             headers={
                 "X-API-KEY": api_key,
                 "Content-Type": "application/json",
@@ -162,9 +157,9 @@ def send_assembly_notification(
             timeout=10.0,
         )
         if not response.is_success:
-            print(f"Assembly notification failed [{response.status_code}]: {response.text}")
+            print(f"Assembly message failed [{response.status_code}]: {response.text}")
             return False
         return True
     except Exception as e:
-        print(f"Assembly notification error: {e}")
+        print(f"Assembly message error: {e}")
         return False

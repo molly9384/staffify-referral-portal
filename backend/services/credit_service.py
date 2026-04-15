@@ -280,17 +280,16 @@ class CreditService:
                     try:
                         from config import settings
                         from models import Client
-                        from services.assembly import send_assembly_notification
+                        from services.assembly import send_assembly_message
                         from sqlalchemy import select as sa_select
                         client_result = await self.db.execute(sa_select(Client).where(Client.id == uuid_mod.UUID(cid)))
                         client = client_result.scalar_one_or_none()
                         if client and client.assembly_client_id and settings.ASSEMBLY_API_KEY:
                             total = data["total"]
-                            send_assembly_notification(
+                            send_assembly_message(
                                 settings.ASSEMBLY_API_KEY,
                                 client.assembly_client_id,
-                                title=f"You've earned ${total:.2f} in referral credits!",
-                                body="Your pending credits have been updated. Check your Referral Rewards portal for details.",
+                                text=f"You've earned ${total:.2f} in referral credits! Your pending credits have been updated. Check your Referral Rewards portal for details.",
                                 sender_member_id=settings.ASSEMBLY_MEMBER_ID or None,
                             )
                     except Exception as e:
@@ -602,17 +601,16 @@ class CreditService:
                     try:
                         from config import settings
                         from models import Client
-                        from services.assembly import send_assembly_notification
+                        from services.assembly import send_assembly_message
                         from sqlalchemy import select as sa_select
                         client_result = await self.db.execute(sa_select(Client).where(Client.id == uuid_mod.UUID(cid)))
                         client = client_result.scalar_one_or_none()
                         if client and client.assembly_client_id and settings.ASSEMBLY_API_KEY:
                             total = data["total"]
-                            send_assembly_notification(
+                            send_assembly_message(
                                 settings.ASSEMBLY_API_KEY,
                                 client.assembly_client_id,
-                                title=f"${total:.2f} in credits applied to your invoice!",
-                                body="Your referral credits have been applied to your latest Staffify invoice.",
+                                text=f"${total:.2f} in referral credits has been applied to your latest Staffify invoice!",
                                 sender_member_id=settings.ASSEMBLY_MEMBER_ID or None,
                             )
                     except Exception as e:
