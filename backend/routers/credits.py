@@ -129,9 +129,10 @@ async def run_credit_automation(
         from services.credit_service import CreditService
         service = CreditService(db)
         result = await service.process_bi_weekly_credits()
+        promoted = await service.promote_eligible_credits()
         return MessageResponse(
             message="Credit automation completed successfully",
-            detail=f"Processed {result['processed']} referrals, created {result['credits_created']} credit entries totaling ${result['total_amount']:.2f}",
+            detail=f"Processed {result['processed']} referrals, created {result['credits_created']} credit entries totaling ${result['total_amount']:.2f}. Promoted {promoted} pending credit(s) to eligible.",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Automation failed: {str(e)}")
