@@ -72,7 +72,10 @@ export default function ClientLayout() {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    // If running inside an Assembly iFrame, send back to the Assembly entry point
+    // so they can re-authenticate via token rather than the password login page
+    const inIframe = window.self !== window.top
+    navigate(inIframe ? '/assembly' : '/login')
   }
 
   const handleExitView = useCallback(() => {

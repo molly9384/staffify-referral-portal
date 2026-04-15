@@ -68,18 +68,27 @@ export default function AssemblyEntry() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) {
+    const isSignedOut = error.includes('No token')
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full text-center">
-          <div className="text-4xl mb-4">⚠️</div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">Unable to sign you in</h2>
-          <p className="text-sm text-gray-500 mb-6">{error}</p>
-          <p className="text-xs text-gray-400">
-            Need help? Contact{' '}
-            <a href="mailto:hello@gostaffify.com" className="text-teal-500 hover:underline">
-              hello@gostaffify.com
-            </a>
+          <div className="text-4xl mb-4">{isSignedOut ? '👋' : '⚠️'}</div>
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">
+            {isSignedOut ? "You've been signed out" : 'Unable to sign you in'}
+          </h2>
+          <p className="text-sm text-gray-500 mb-6">
+            {isSignedOut
+              ? 'Please close and reopen the Staffify Referral Portal from Assembly to sign back in.'
+              : error}
           </p>
+          {!isSignedOut && (
+            <p className="text-xs text-gray-400">
+              Need help? Contact{' '}
+              <a href="mailto:hello@gostaffify.com" className="text-teal-500 hover:underline">
+                hello@gostaffify.com
+              </a>
+            </p>
+          )}
         </div>
       </div>
     )
