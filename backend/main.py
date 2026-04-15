@@ -74,6 +74,16 @@ async def lifespan(app: FastAPI):
             await conn.execute(text(col_sql))
         await conn.commit()
 
+    # Add Assembly integration column if it doesn't exist
+    async with engine.connect() as conn:
+        await conn.execute(text(
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS assembly_client_id VARCHAR(100)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_clients_assembly_client_id ON clients (assembly_client_id)"
+        ))
+        await conn.commit()
+
     # Create admin user if none exists
     await create_admin_user()
 
@@ -104,6 +114,8 @@ app.add_middleware(
         "https://referral.gostaffify.com",
         "http://localhost:5173",
         "http://localhost:3000",
+        "https://*.assembly.com",
+        "https://app.assembly.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],

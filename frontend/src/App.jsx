@@ -8,6 +8,11 @@ import ResetPassword from './pages/ResetPassword'
 import AcceptInvite from './pages/AcceptInvite'
 import ProtectedRoute from './components/ProtectedRoute'
 
+// Assembly SSO pages
+import AssemblyEntry from './pages/AssemblyEntry'
+import AssemblyWelcome from './pages/AssemblyWelcome'
+import AssemblySignup from './pages/AssemblySignup'
+
 // Internal pages
 import InternalLayout from './components/InternalLayout'
 import Dashboard from './pages/internal/Dashboard'
@@ -88,6 +93,11 @@ export default function App() {
 
       {/* Legacy /portal/* aliases → redirect to /client/* */}
       <Route path="/portal/*" element={<Navigate to="/client/dashboard" replace />} />
+
+      {/* Assembly SSO routes — no auth required, Assembly handles identity */}
+      <Route path="/assembly" element={<AssemblyEntry />} />
+      <Route path="/assembly/welcome" element={<AssemblyWelcome />} />
+      <Route path="/assembly/signup" element={<AssemblySignup />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
