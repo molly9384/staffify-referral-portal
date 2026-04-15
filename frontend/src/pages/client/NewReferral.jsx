@@ -85,8 +85,8 @@ export default function NewReferral() {
               <input type="text" className="input" required placeholder="Acme Corp or N/A" value={form.referred_company} onChange={set('referred_company')} />
             </div>
             <div>
-              <label className="label">Email Address <span className="text-gray-400 font-normal">(optional)</span></label>
-              <input type="email" className="input" placeholder="contact@example.com" value={form.referred_email} onChange={set('referred_email')} />
+              <label className="label">Email Address <span className="text-red-500">*</span></label>
+              <input type="email" className="input" required placeholder="contact@example.com" value={form.referred_email} onChange={set('referred_email')} />
             </div>
             <div>
               <label className="label">Phone Number <span className="text-red-500">*</span></label>
