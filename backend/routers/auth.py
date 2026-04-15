@@ -857,21 +857,25 @@ async def assembly_token(token: str, db: AsyncSession = Depends(get_db)):
     so the frontend can show the welcome/signup flow.
     """
     from models import Client
-    from services.assembly import decrypt_assembly_token, get_assembly_client_email
+    from services.assembly import decrypt_assembly_token, get_assembly_client
 
     # 1. Decrypt token → get Assembly client ID
+    if not settings.ASSEMBLY_API_KEY:
+        raise HTTPException(status_code=503, detail="Assembly integration is not configured")
+
     try:
-        payload = decrypt_assembly_token(token)
+        payload = decrypt_assembly_token(settings.ASSEMBLY_API_KEY, token)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    assembly_client_id = payload.get("client_id") or payload.get("id") or payload.get("clientId")
+    assembly_client_id = payload.get("clientId") or payload.get("client_id") or payload.get("id")
     if not assembly_client_id:
-        raise HTTPException(status_code=400, detail="Token missing client ID")
+        raise HTTPException(status_code=400, detail="Token missing client ID — internal users should log in directly")
 
     # 2. Get email from Assembly API
     try:
-        email = await get_assembly_client_email(str(assembly_client_id))
+        client_data = get_assembly_client(settings.ASSEMBLY_API_KEY, str(assembly_client_id))
+        email = client_data.get("email") or (client_data.get("client") or {}).get("email", "")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Assembly API error: {e}")
 
