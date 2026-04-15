@@ -647,6 +647,25 @@ async def accept_invite(
     await db.refresh(new_user)
     await db.commit()
 
+    # Admin notification
+    if settings.ADMIN_EMAIL:
+        recipients = [e.strip() for e in settings.ADMIN_EMAIL.split(",") if e.strip()]
+        try:
+            import asyncio
+            from services.email_service import send_email
+            html_body = (
+                f"<p style='margin:0 0 16px;'>A client has accepted their invite and created a portal account.</p>"
+                f"<table style='border-collapse:collapse;font-size:14px;'>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Name</td><td style='padding:4px 0;'><strong>{new_user.full_name}</strong></td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Email</td><td style='padding:4px 0;'>{new_user.email}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Sign-up Method</td><td style='padding:4px 0;'>Invite</td></tr>"
+                f"</table>"
+                f"<p style='margin-top:20px;'><a href='{settings.FRONTEND_URL}' style='color:#1abde1;'>View in Admin Portal</a></p>"
+            )
+            asyncio.create_task(send_email(recipients, f"Invite Accepted: {new_user.full_name}", html_body))
+        except Exception as e:
+            print(f"Admin invite notification failed: {e}")
+
     return new_user
 
 
@@ -827,169 +846,127 @@ async def reset_password_endpoint(
     return {"message": "Password reset successfully"}
 
 
-# ── Assembly iFrame Integration ────────────────────────────────────────────────
+# ── Assembly SSO ──────────────────────────────────────────────────────────────
 
-from pydantic import BaseModel as _BaseModel
-from services.assembly import decrypt_assembly_token, get_assembly_client
-
-
-class AssemblyTokenRequest(_BaseModel):
-    token: str
-
-
-class AssemblyTokenResponse(_BaseModel):
-    status: str                   # "authenticated" or "not_registered"
-    access_token: str | None = None
-    token_type: str | None = None
-    role: str | None = None
-    user_id: str | None = None
-    full_name: str | None = None
-    client_id: str | None = None
-    email: str | None = None      # only when status == "not_registered"
-    name: str | None = None       # only when status == "not_registered"
-
-
-class AssemblySignupRequest(_BaseModel):
-    token: str
-    full_name: str
-    password: str
-
-
-@router.post("/assembly-token", response_model=AssemblyTokenResponse)
-async def assembly_token_login(body: AssemblyTokenRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/assembly-token")
+async def assembly_token(token: str, db: AsyncSession = Depends(get_db)):
     """
-    Exchange an Assembly iFrame session token for a Staffify JWT.
-
-    Returns {"status": "authenticated", ...token fields} if the client already
-    has a portal account matched by email, or {"status": "not_registered",
-    "email": ..., "name": ...} so the frontend can show the signup flow.
+    Called by the frontend AssemblyEntry page on load.
+    Decrypts the Assembly SSO token, looks up the client by email,
+    and returns either a JWT (existing user) or a 'new_user' flag with their email
+    so the frontend can show the welcome/signup flow.
     """
-    if not settings.ASSEMBLY_API_KEY:
-        raise HTTPException(status_code=503, detail="Assembly integration is not configured")
+    from models import Client
+    from services.assembly import decrypt_assembly_token, get_assembly_client_email
 
+    # 1. Decrypt token → get Assembly client ID
     try:
-        payload = decrypt_assembly_token(settings.ASSEMBLY_API_KEY, body.token)
+        payload = decrypt_assembly_token(token)
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Assembly token: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-    assembly_client_id = payload.get("clientId")
+    assembly_client_id = payload.get("client_id") or payload.get("id") or payload.get("clientId")
     if not assembly_client_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Assembly token does not contain a clientId. Internal users should log in directly."
-        )
+        raise HTTPException(status_code=400, detail="Token missing client ID")
 
+    # 2. Get email from Assembly API
     try:
-        assembly_client = get_assembly_client(settings.ASSEMBLY_API_KEY, assembly_client_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        email = await get_assembly_client_email(str(assembly_client_id))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Assembly API error: {e}")
 
-    email = assembly_client.get("email", "")
-    name = f"{assembly_client.get('givenName', '')} {assembly_client.get('familyName', '')}".strip()
+    if not email:
+        raise HTTPException(status_code=404, detail="Client not found in Assembly")
 
-    # Look up existing portal user by email
-    result = await db.execute(
-        select(User).where(
-            User.email == email,
-            User.role == UserRole.client,
-            User.is_active == True,
-        )
-    )
-    user = result.scalar_one_or_none()
+    email = email.lower().strip()
 
-    if user:
-        # Opportunistically save their Assembly client ID for future reference
-        if user.client_id:
-            from models import Client
-            client_result = await db.execute(select(Client).where(Client.id == user.client_id))
-            client = client_result.scalar_one_or_none()
-            if client and not client.assembly_client_id:
-                client.assembly_client_id = assembly_client_id
-                await db.commit()
+    # 3. Store assembly_client_id on the Client record if we have one
+    client_result = await db.execute(select(Client).where(Client.email == email))
+    client = client_result.scalar_one_or_none()
+    if client and not client.assembly_client_id:
+        client.assembly_client_id = str(assembly_client_id)
+        await db.commit()
 
+    # 4. Check if portal user exists
+    user_result = await db.execute(select(User).where(User.email == email))
+    user = user_result.scalar_one_or_none()
+
+    if user and user.is_active:
+        # Existing user — issue JWT and auto-login
         access_token = create_access_token(
             data={"sub": str(user.id), "role": user.role.value},
             expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         )
-        return AssemblyTokenResponse(
-            status="authenticated",
-            access_token=access_token,
-            token_type="bearer",
-            role=user.role.value,
-            user_id=str(user.id),
-            full_name=user.full_name,
-            client_id=str(user.client_id) if user.client_id else None,
-        )
+        return {
+            "status": "existing_user",
+            "access_token": access_token,
+            "token_type": "bearer",
+            "role": user.role.value,
+            "user_id": str(user.id),
+            "full_name": user.full_name,
+            "client_id": str(user.client_id) if user.client_id else None,
+        }
 
-    # No account yet — tell the frontend to show the welcome/signup flow
-    return AssemblyTokenResponse(status="not_registered", email=email, name=name)
+    # New user — tell frontend to show welcome/signup flow
+    return {
+        "status": "new_user",
+        "email": email,
+        "client_name": client.name if client else None,
+    }
 
 
 @router.post("/assembly-signup", response_model=Token)
-async def assembly_signup(body: AssemblySignupRequest, db: AsyncSession = Depends(get_db)):
+async def assembly_signup(
+    request: ClientRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
     """
-    Create a Staffify portal account for a new client coming from Assembly.
-
-    Decrypts the Assembly token to verify identity and get their email,
-    then creates or links a Client + User record and returns a JWT.
+    Called when a new Assembly user sets their password for the first time.
+    Email is pre-confirmed from Assembly — they just choose a password.
+    Creates the portal account and returns a JWT for immediate auto-login.
     """
-    if not settings.ASSEMBLY_API_KEY:
-        raise HTTPException(status_code=503, detail="Assembly integration is not configured")
-
-    try:
-        payload = decrypt_assembly_token(settings.ASSEMBLY_API_KEY, body.token)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Assembly token: {e}")
-
-    assembly_client_id = payload.get("clientId")
-    if not assembly_client_id:
-        raise HTTPException(status_code=403, detail="Token does not belong to a client")
-
-    try:
-        assembly_client = get_assembly_client(settings.ASSEMBLY_API_KEY, assembly_client_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    email = assembly_client.get("email", "")
-
-    # Guard: if they already have an account, just log them in
-    result = await db.execute(select(User).where(User.email == email))
-    existing_user = result.scalar_one_or_none()
-    if existing_user:
-        access_token = create_access_token(
-            data={"sub": str(existing_user.id), "role": existing_user.role.value},
-            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-        )
-        return Token(
-            access_token=access_token,
-            token_type="bearer",
-            role=existing_user.role.value,
-            user_id=str(existing_user.id),
-            full_name=existing_user.full_name,
-            client_id=str(existing_user.client_id) if existing_user.client_id else None,
-        )
-
-    # If a Client record already exists with this email, link to it
     from models import Client
+    from services.qbo_service import QBOService
+
+    email = request.email.lower().strip()
+
+    # Ensure no account already exists
+    existing = await db.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="An account already exists for that email. Please sign in.")
+
+    # Find or create Client record
     client_result = await db.execute(select(Client).where(Client.email == email))
     client = client_result.scalar_one_or_none()
 
     if not client:
-        client = Client(
-            name=body.full_name,
-            email=email,
-            assembly_client_id=assembly_client_id,
-            is_active=True,
-        )
+        # Try QBO lookup as fallback
+        qbo = QBOService()
+        qbo_customer = None
+        if qbo.is_connected():
+            try:
+                qbo_customer = await qbo.find_customer_by_email(email)
+            except Exception:
+                pass
+
+        if qbo_customer:
+            client = Client(
+                name=qbo_customer["display_name"],
+                email=email,
+                qbo_customer_id=qbo_customer["id"],
+                is_active=True,
+            )
+        else:
+            client = Client(name=request.full_name, email=email, is_active=True)
+
         db.add(client)
         await db.flush()
-    elif not client.assembly_client_id:
-        client.assembly_client_id = assembly_client_id
 
+    # Create portal user
     new_user = User(
         email=email,
-        hashed_password=get_password_hash(body.password),
-        full_name=body.full_name,
+        hashed_password=get_password_hash(request.password),
+        full_name=request.full_name,
         role=UserRole.client,
         client_id=client.id,
         is_active=True,
@@ -999,6 +976,36 @@ async def assembly_signup(body: AssemblySignupRequest, db: AsyncSession = Depend
     await db.refresh(new_user)
     await db.commit()
 
+    # Welcome email
+    try:
+        import asyncio
+        from services.email_service import send_email, email_welcome_self_registered
+        subject, html = email_welcome_self_registered(new_user.full_name, new_user.email)
+        asyncio.create_task(send_email([new_user.email], subject, html))
+    except Exception as e:
+        print(f"Welcome email failed: {e}")
+
+    # Admin notification
+    if settings.ADMIN_EMAIL:
+        recipients = [e.strip() for e in settings.ADMIN_EMAIL.split(",") if e.strip()]
+        try:
+            import asyncio
+            from services.email_service import send_email
+            html_body = (
+                f"<p style='margin:0 0 16px;'>A new client signed up via Assembly.</p>"
+                f"<table style='border-collapse:collapse;font-size:14px;'>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Name</td><td style='padding:4px 0;'><strong>{new_user.full_name}</strong></td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Email</td><td style='padding:4px 0;'>{new_user.email}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Client</td><td style='padding:4px 0;'>{client.name}</td></tr>"
+                f"<tr><td style='padding:4px 16px 4px 0;color:#888;'>Sign-up Method</td><td style='padding:4px 0;'>Assembly SSO</td></tr>"
+                f"</table>"
+                f"<p style='margin-top:20px;'><a href='{settings.FRONTEND_URL}' style='color:#1abde1;'>View in Admin Portal</a></p>"
+            )
+            asyncio.create_task(send_email(recipients, f"New Portal Signup: {new_user.full_name}", html_body))
+        except Exception as e:
+            print(f"Admin signup notification failed: {e}")
+
+    # Issue JWT for immediate auto-login
     access_token = create_access_token(
         data={"sub": str(new_user.id), "role": new_user.role.value},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -1011,3 +1018,4 @@ async def assembly_signup(body: AssemblySignupRequest, db: AsyncSession = Depend
         full_name=new_user.full_name,
         client_id=str(new_user.client_id) if new_user.client_id else None,
     )
+    return {"message": "Password reset successfully"}

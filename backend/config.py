@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     GMAIL_APP_PASSWORD: str = ""
     ADMIN_EMAIL: str = ""
 
+    ASSEMBLY_API_KEY: str = ""
+    ASSEMBLY_ENCRYPTION_KEY: str = ""  # AES-128 CBC key from Assembly (hex or base64)
+
     BASE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:5173"
 

@@ -7,6 +7,8 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import AcceptInvite from './pages/AcceptInvite'
 import ProtectedRoute from './components/ProtectedRoute'
+
+// Assembly SSO pages
 import AssemblyEntry from './pages/AssemblyEntry'
 import AssemblyWelcome from './pages/AssemblyWelcome'
 import AssemblySignup from './pages/AssemblySignup'
@@ -40,18 +42,10 @@ function RootRedirect() {
   return <Navigate to="/internal/dashboard" replace />
 }
 
-function RootOrAssembly() {
-  const params = new URLSearchParams(window.location.search)
-  if (params.get('token')) return <AssemblyEntry />
-  return <RootRedirect />
-}
-
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<RootOrAssembly />} />
-      <Route path="/assembly/welcome" element={<AssemblyWelcome />} />
-      <Route path="/assembly/signup" element={<AssemblySignup />} />
+      <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -99,6 +93,11 @@ export default function App() {
 
       {/* Legacy /portal/* aliases → redirect to /client/* */}
       <Route path="/portal/*" element={<Navigate to="/client/dashboard" replace />} />
+
+      {/* Assembly SSO routes — no auth required, Assembly handles identity */}
+      <Route path="/assembly" element={<AssemblyEntry />} />
+      <Route path="/assembly/welcome" element={<AssemblyWelcome />} />
+      <Route path="/assembly/signup" element={<AssemblySignup />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

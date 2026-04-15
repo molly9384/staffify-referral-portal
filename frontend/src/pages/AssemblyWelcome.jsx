@@ -1,91 +1,89 @@
 /**
- * AssemblyWelcome — landing page shown to Assembly clients who don't yet
- * have a Staffify referral portal account.
+ * AssemblyWelcome.jsx
  *
- * Explains the referral program and invites them to create an account.
- * Receives { email, name, assemblyToken } via React Router state.
+ * Welcome screen shown to first-time Assembly users.
+ * Explains the $1/hr referral credit program and prompts them to set a password
+ * to activate their Staffify Referral Portal account.
  */
 
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 
 export default function AssemblyWelcome() {
-  const { state } = useLocation()
+  const location = useLocation()
   const navigate = useNavigate()
+  const { email, clientName } = location.state || {}
 
-  if (!state?.email) {
-    return <Navigate to="/login" replace />
-  }
+  // If someone lands here directly without state, send them back to entry
+  useEffect(() => {
+    if (!email) {
+      navigate('/assembly', { replace: true })
+    }
+  }, [email, navigate])
 
-  const firstName = state.name?.split(' ')[0] || 'there'
+  if (!email) return null
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-lg space-y-6">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-lg w-full">
 
         {/* Header */}
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
-            <span className="text-3xl">👋</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Hey {firstName}, welcome to Staffify Referrals!
+        <div className="text-center mb-8">
+          <div className="text-5xl mb-4">🎉</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Welcome to the Staffify Referral Portal!
           </h1>
-          <p className="text-gray-500 mt-2 text-sm leading-relaxed">
-            Know someone who could benefit from a virtual assistant? Refer them to Staffify
-            and earn credits toward your own invoices — automatically.
-          </p>
+          {clientName && (
+            <p className="text-sm text-gray-500">
+              We're setting up your account for <span className="font-medium text-gray-700">{clientName}</span>.
+            </p>
+          )}
         </div>
 
         {/* How it works */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
-          <h2 className="font-semibold text-gray-900">How it works</h2>
-
-          <div className="flex items-start gap-3">
-            <span className="text-xl shrink-0">💰</span>
-            <div>
-              <p className="font-medium text-gray-800 text-sm">Earn $1.00 per billable hour</p>
-              <p className="text-gray-500 text-xs mt-0.5">
-                You earn $1 for every hour billed by the first VA hired by your referral. Hours add up fast.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <span className="text-xl shrink-0">📅</span>
-            <div>
-              <p className="font-medium text-gray-800 text-sm">12-month credit window</p>
-              <p className="text-gray-500 text-xs mt-0.5">
-                Credits accumulate for 12 months from when your referral's VA starts. The clock pauses
-                if a VA is replaced — you never lose time unfairly.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <span className="text-xl shrink-0">🧾</span>
-            <div>
-              <p className="font-medium text-gray-800 text-sm">Applied to your next invoice</p>
-              <p className="text-gray-500 text-xs mt-0.5">
-                Once your referral's invoice is paid, your credit is automatically applied
-                to your next Staffify invoice. No chasing, no paperwork.
-              </p>
-            </div>
-          </div>
+        <div className="bg-teal-50 border border-teal-100 rounded-xl p-5 mb-6">
+          <h2 className="text-sm font-semibold text-teal-700 uppercase tracking-wide mb-3">
+            How It Works
+          </h2>
+          <ul className="space-y-3">
+            <li className="flex items-start gap-3">
+              <span className="text-lg leading-none mt-0.5">👥</span>
+              <span className="text-sm text-gray-700">
+                <strong>Refer a friend or colleague</strong> to Staffify — anyone who could benefit from a virtual assistant.
+              </span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="text-lg leading-none mt-0.5">💵</span>
+              <span className="text-sm text-gray-700">
+                Once they become an active client, you earn{' '}
+                <strong className="text-teal-600">$1.00 per hour</strong> worked by their VA — applied directly to your invoice.
+              </span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="text-lg leading-none mt-0.5">📊</span>
+              <span className="text-sm text-gray-700">
+                <strong>Track everything</strong> — referral status, credits earned, and credit history — all in one place.
+              </span>
+            </li>
+          </ul>
         </div>
 
         {/* CTA */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center space-y-3">
-          <p className="text-sm text-gray-600">
-            Set up your account in under a minute. Your email{' '}
-            <span className="font-medium text-gray-900">({state.email})</span> is already
-            confirmed — just choose a password.
-          </p>
+        <div className="text-center">
           <button
-            onClick={() => navigate('/assembly/signup', { state })}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
+            onClick={() =>
+              navigate('/assembly/signup', {
+                state: { email, clientName },
+              })
+            }
+            className="w-full bg-teal-500 hover:bg-teal-600 text-white font-semibold py-3 px-6 rounded-xl transition-colors text-sm"
           >
-            Get Started →
+            Set Up My Account →
           </button>
+          <p className="text-xs text-gray-400 mt-3">
+            Your email (<span className="text-gray-500">{email}</span>) is already confirmed from Assembly.
+            You just need to create a password.
+          </p>
         </div>
 
       </div>

@@ -1,47 +1,73 @@
 /**
- * AssemblySignup — password setup form for new clients coming from Assembly.
+ * AssemblySignup.jsx
  *
- * Email is pre-confirmed from Assembly. They just set their name and password.
- * On success they're logged in and sent straight to their referral dashboard.
+ * Password-set form for new Assembly users.
+ * Email is pre-filled and locked (confirmed from Assembly).
+ * On success, auto-login and redirect to the client dashboard.
  */
 
-import { useState } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { assemblySignup } from '../api/client'
+import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import axios from 'axios'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
 export default function AssemblySignup() {
-  const { state } = useLocation()
+  const location = useLocation()
   const navigate = useNavigate()
   const { loginWithToken } = useAuth()
+  const { email, clientName } = location.state || {}
 
-  const [fullName, setFullName] = useState(state?.name || '')
+  const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
 
-  if (!state?.email || !state?.assemblyToken) {
-    return <Navigate to="/login" replace />
-  }
+  // Guard: must arrive here with email state from AssemblyWelcome
+  useEffect(() => {
+    if (!email) {
+      navigate('/assembly', { replace: true })
+    }
+  }, [email, navigate])
 
-  const handleSubmit = async (e) => {
+  if (!email) return null
+
+  async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
 
+    if (!fullName.trim()) {
+      setError('Please enter your full name.')
+      return
+    }
     if (password.length < 8) {
       setError('Password must be at least 8 characters.')
       return
     }
-    if (password !== confirm) {
+    if (password !== confirmPassword) {
       setError('Passwords do not match.')
       return
     }
 
     setLoading(true)
     try {
-      const data = await assemblySignup(state.assemblyToken, fullName, password)
-      loginWithToken(data)
+      const { data } = await axios.post(`${API_BASE}/auth/assembly-signup`, {
+        email,
+        full_name: fullName.trim(),
+        password,
+      })
+
+      loginWithToken({
+        access_token: data.access_token,
+        token_type: data.token_type,
+        role: data.role,
+        user_id: data.user_id,
+        full_name: data.full_name,
+        client_id: data.client_id,
+      })
+
       navigate('/client/dashboard', { replace: true })
     } catch (err) {
       setError(err.response?.data?.detail || 'Something went wrong. Please try again.')
@@ -51,88 +77,93 @@ export default function AssemblySignup() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full">
 
         {/* Header */}
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Almost there! Confirm your name and set a password.
-          </p>
+        <div className="text-center mb-6">
+          <div className="text-4xl mb-3">🔐</div>
+          <h1 className="text-xl font-bold text-gray-900 mb-1">Create Your Account</h1>
+          {clientName && (
+            <p className="text-sm text-gray-500">{clientName}</p>
+          )}
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
 
-          {/* Email — read-only */}
+          {/* Email — locked */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Email
+            </label>
             <input
               type="email"
-              value={state.email}
+              value={email}
               disabled
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm cursor-not-allowed"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-400 cursor-not-allowed"
             />
-            <p className="text-xs text-gray-400 mt-1">Confirmed via your Assembly account</p>
+            <p className="text-xs text-gray-400 mt-1">Confirmed via Assembly — can't be changed here.</p>
           </div>
 
           {/* Full name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+              Full Name
+            </label>
             <input
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
+              placeholder="Jane Smith"
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Your name"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
             />
           </div>
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+              Password
+            </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="At least 8 characters"
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
             />
           </div>
 
           {/* Confirm password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+              Confirm Password
+            </label>
             <input
               type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Repeat your password"
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+            <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg px-4 py-3">
+              {error}
+            </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
+            className="w-full bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl transition-colors text-sm mt-2"
           >
-            {loading ? 'Creating account…' : 'Create account & go to dashboard →'}
+            {loading ? 'Creating your account…' : 'Create Account & Sign In →'}
           </button>
         </form>
-
-        <p className="text-center text-xs text-gray-400">
-          Already have an account?{' '}
-          <a href="/login" className="text-blue-500 hover:underline">Log in directly</a>
-        </p>
 
       </div>
     </div>
