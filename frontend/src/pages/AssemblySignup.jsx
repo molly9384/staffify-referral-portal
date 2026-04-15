@@ -159,7 +159,8 @@ export default function AssemblySignup() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl transition-colors text-sm mt-2"
+            className="w-full disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl transition-colors text-sm mt-2"
+            style={{ backgroundColor: '#1abde1' }}
           >
             {loading ? 'Creating your account…' : 'Create Account & Sign In →'}
           </button>
