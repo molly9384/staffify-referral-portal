@@ -91,3 +91,42 @@ def get_assembly_client(api_key: str, client_id: str) -> dict:
         raise ValueError(f"Assembly client '{client_id}' not found")
     response.raise_for_status()
     return response.json()
+
+
+def send_assembly_notification(
+    api_key: str,
+    recipient_client_id: str,
+    title: str,
+    body: str | None = None,
+) -> bool:
+    """
+    Send an in-product notification to a client inside Assembly.
+
+    Uses the recipient as their own sender (self-notification pattern
+    used by Custom Apps). Returns True on success, False on failure.
+    """
+    try:
+        payload = {
+            "senderId": recipient_client_id,
+            "recipientClientId": recipient_client_id,
+            "deliveryTargets": {
+                "inProduct": {
+                    "title": title,
+                    **({"body": body} if body else {}),
+                }
+            },
+        }
+        response = httpx.post(
+            f"{ASSEMBLY_API_BASE}/notifications",
+            headers={
+                "X-API-KEY": api_key,
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        return True
+    except Exception as e:
+        print(f"Assembly notification failed: {e}")
+        return False

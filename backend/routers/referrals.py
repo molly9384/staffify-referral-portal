@@ -18,6 +18,21 @@ from schemas import (
 router = APIRouter()
 
 
+async def _send_assembly_notification(db: AsyncSession, client_id, title: str, body: str | None = None):
+    """Send an Assembly in-product notification if the client has an assembly_client_id."""
+    if not settings.ASSEMBLY_API_KEY or not client_id:
+        return
+    try:
+        from models import Client
+        from services.assembly import send_assembly_notification
+        result = await db.execute(select(Client).where(Client.id == client_id))
+        client = result.scalar_one_or_none()
+        if client and client.assembly_client_id:
+            send_assembly_notification(settings.ASSEMBLY_API_KEY, client.assembly_client_id, title, body)
+    except Exception as e:
+        print(f"Assembly notification failed: {e}")
+
+
 async def _send_new_referral_notifications(referral: Referral, referring_client_name: str):
     import httpx
 
@@ -176,7 +191,7 @@ async def create_referral(
     referring_client_name = created.referring_client.name if created.referring_client else "Unknown"
     asyncio.create_task(_send_new_referral_notifications(created, referring_client_name))
 
-    # Confirmation email to the referring client
+    # Confirmation email + Assembly notification to the referring client
     if created.referring_client_id:
         try:
             from services.email_service import send_email, get_client_emails, email_referral_confirmation
@@ -186,6 +201,13 @@ async def create_referral(
                 asyncio.create_task(send_email(client_emails, subject, html))
         except Exception as e:
             print(f"Referral confirmation email failed: {e}")
+
+        asyncio.create_task(_send_assembly_notification(
+            db,
+            created.referring_client_id,
+            title=f"Referral submitted: {created.referred_name or 'your contact'}",
+            body="We've received your referral and will be in touch once they're onboarded.",
+        ))
 
     return created
 
@@ -363,15 +385,30 @@ async def update_referral_status(
                     # Reinstated from paused
                     subject, html = email_referral_reinstated(client_name, referred)
                     asyncio.create_task(send_email(client_emails, subject, html))
+                    asyncio.create_task(_send_assembly_notification(
+                        db, referral.referring_client_id,
+                        title=f"Referral reinstated: {referred}",
+                        body="Great news — your referral's VA hours have been reinstated. Credits are accumulating again!",
+                    ))
                 elif new_status == ReferralStatus.va_billing:
                     # Newly active
                     act = referral.activation_date.strftime("%B %-d, %Y") if referral.activation_date else "today"
                     subject, html = email_referral_active(client_name, referred, act)
                     asyncio.create_task(send_email(client_emails, subject, html))
+                    asyncio.create_task(_send_assembly_notification(
+                        db, referral.referring_client_id,
+                        title=f"Referral active: {referred}",
+                        body=f"Your referral is now an active Staffify client! You'll start earning $1.00/hr credits from {act}.",
+                    ))
                 elif new_status == ReferralStatus.paused:
                     reason = status_update.notes or ""
                     subject, html = email_referral_paused(client_name, referred, reason)
                     asyncio.create_task(send_email(client_emails, subject, html))
+                    asyncio.create_task(_send_assembly_notification(
+                        db, referral.referring_client_id,
+                        title=f"Referral paused: {referred}",
+                        body="Your referral's VA hours have been paused. Credits will resume once they restart.",
+                    ))
         except Exception as e:
             print(f"Status-change client email failed: {e}")
 

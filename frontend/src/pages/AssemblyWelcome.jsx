@@ -30,7 +30,7 @@ export default function AssemblyWelcome() {
         {/* Header */}
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Staffify" className="h-10 mx-auto mb-4" />
-          <div className="text-5xl mb-4">🎉</div>
+          <div className="text-3xl mb-4">🎉</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Welcome to Staffify Referral Rewards!
           </h1>

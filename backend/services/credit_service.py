@@ -276,6 +276,24 @@ class CreditService:
                             data["name"], data["credits"], data["total"]
                         )
                         await send_email(emails, subject, html)
+                    # Assembly in-product notification
+                    try:
+                        from config import settings
+                        from models import Client
+                        from services.assembly import send_assembly_notification
+                        from sqlalchemy import select as sa_select
+                        client_result = await self.db.execute(sa_select(Client).where(Client.id == uuid_mod.UUID(cid)))
+                        client = client_result.scalar_one_or_none()
+                        if client and client.assembly_client_id and settings.ASSEMBLY_API_KEY:
+                            total = data["total"]
+                            send_assembly_notification(
+                                settings.ASSEMBLY_API_KEY,
+                                client.assembly_client_id,
+                                title=f"You've earned ${total:.2f} in referral credits!",
+                                body="Your pending credits have been updated. Check your Referral Rewards portal for details.",
+                            )
+                    except Exception as e:
+                        print(f"[assembly] Pending credits notification failed: {e}")
             except Exception as e:
                 print(f"[email] Pending credits statement failed: {e}")
 
@@ -579,6 +597,24 @@ class CreditService:
                             data["name"], data["credits"], data["total"]
                         )
                         await send_email(emails, subject, html)
+                    # Assembly in-product notification
+                    try:
+                        from config import settings
+                        from models import Client
+                        from services.assembly import send_assembly_notification
+                        from sqlalchemy import select as sa_select
+                        client_result = await self.db.execute(sa_select(Client).where(Client.id == uuid_mod.UUID(cid)))
+                        client = client_result.scalar_one_or_none()
+                        if client and client.assembly_client_id and settings.ASSEMBLY_API_KEY:
+                            total = data["total"]
+                            send_assembly_notification(
+                                settings.ASSEMBLY_API_KEY,
+                                client.assembly_client_id,
+                                title=f"${total:.2f} in credits applied to your invoice!",
+                                body="Your referral credits have been applied to your latest Staffify invoice.",
+                            )
+                    except Exception as e:
+                        print(f"[assembly] Applied credits notification failed: {e}")
             except Exception as e:
                 print(f"[email] Applied credits statement failed: {e}")
 
