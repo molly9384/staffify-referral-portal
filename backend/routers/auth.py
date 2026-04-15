@@ -956,7 +956,7 @@ async def assembly_signup(
         if not qbo_customer:
             raise HTTPException(
                 status_code=400,
-                detail="We don't have an account on file for that email. Please contact Staffify at hello@gostaffify.com."
+                detail="We don't have an account on file for that email. Please message us in your Client Portal or reach out at hello@gostaffify.com and we'll get you sorted."
             )
 
         client = Client(
