@@ -20,10 +20,15 @@ router = APIRouter()
 
 def _send_assembly_notification(assembly_client_id: str | None, title: str, body: str | None = None):
     """Send an Assembly in-product notification. Pass assembly_client_id directly to avoid DB calls in async tasks."""
-    if not settings.ASSEMBLY_API_KEY or not assembly_client_id:
+    if not settings.ASSEMBLY_API_KEY:
+        print("Assembly notification skipped: ASSEMBLY_API_KEY not set")
+        return
+    if not assembly_client_id:
+        print(f"Assembly notification skipped: no assembly_client_id for this client (title: {title})")
         return
     try:
         from services.assembly import send_assembly_notification
+        print(f"Sending Assembly notification to {assembly_client_id}: {title}")
         send_assembly_notification(settings.ASSEMBLY_API_KEY, assembly_client_id, title, body)
     except Exception as e:
         print(f"Assembly notification failed: {e}")

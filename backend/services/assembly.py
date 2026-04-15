@@ -101,13 +101,10 @@ def send_assembly_notification(
 ) -> bool:
     """
     Send an in-product notification to a client inside Assembly.
-
-    Uses the recipient as their own sender (self-notification pattern
-    used by Custom Apps). Returns True on success, False on failure.
+    Returns True on success, False on failure.
     """
     try:
         payload = {
-            "senderId": recipient_client_id,
             "recipientClientId": recipient_client_id,
             "deliveryTargets": {
                 "inProduct": {
@@ -125,8 +122,10 @@ def send_assembly_notification(
             json=payload,
             timeout=10.0,
         )
-        response.raise_for_status()
+        if not response.is_success:
+            print(f"Assembly notification failed [{response.status_code}]: {response.text}")
+            return False
         return True
     except Exception as e:
-        print(f"Assembly notification failed: {e}")
+        print(f"Assembly notification error: {e}")
         return False
