@@ -18,24 +18,6 @@ from schemas import (
 router = APIRouter()
 
 
-def _send_assembly_message(assembly_client_id: str | None, title: str, body: str | None = None):
-    """Send a message to a client via Assembly's Messages inbox."""
-    if not settings.ASSEMBLY_API_KEY:
-        return
-    if not assembly_client_id:
-        return
-    try:
-        from services.assembly import send_assembly_message
-        text = f"{title}\n\n{body}" if body else title
-        send_assembly_message(
-            settings.ASSEMBLY_API_KEY,
-            assembly_client_id,
-            text,
-            sender_member_id=settings.ASSEMBLY_MEMBER_ID or None,
-        )
-    except Exception as e:
-        print(f"Assembly message failed: {e}")
-
 
 async def _send_new_referral_notifications(referral: Referral, referring_client_name: str):
     import httpx
@@ -195,7 +177,7 @@ async def create_referral(
     referring_client_name = created.referring_client.name if created.referring_client else "Unknown"
     asyncio.create_task(_send_new_referral_notifications(created, referring_client_name))
 
-    # Confirmation email + Assembly notification to the referring client
+    # Confirmation email to the referring client
     if created.referring_client_id:
         try:
             from services.email_service import send_email, get_client_emails, email_referral_confirmation
@@ -205,13 +187,6 @@ async def create_referral(
                 asyncio.create_task(send_email(client_emails, subject, html))
         except Exception as e:
             print(f"Referral confirmation email failed: {e}")
-
-        assembly_id = created.referring_client.assembly_client_id if created.referring_client else None
-        _send_assembly_message(
-            assembly_id,
-            title=f"Referral submitted: {created.referred_name or 'your contact'}",
-            body="We've received your referral and will be in touch once they're onboarded.",
-        )
 
     return created
 
@@ -383,37 +358,19 @@ async def update_referral_status(
             client_emails = await get_client_emails(db, referral.referring_client_id)
             client_name = referral.referring_client.name if referral.referring_client else ""
             referred = referral.referred_name or "your contact"
-            assembly_id = referral.referring_client.assembly_client_id if referral.referring_client else None
 
             if client_emails:
                 if new_status == ReferralStatus.va_billing and prev_status == ReferralStatus.paused:
-                    # Reinstated from paused
                     subject, html = email_referral_reinstated(client_name, referred)
                     asyncio.create_task(send_email(client_emails, subject, html))
-                    _send_assembly_message(
-                        assembly_id,
-                        title=f"Referral reinstated: {referred}",
-                        body="Great news — your referral's VA hours have been reinstated. Credits are accumulating again!",
-                    )
                 elif new_status == ReferralStatus.va_billing:
-                    # Newly active
                     act = referral.activation_date.strftime("%B %-d, %Y") if referral.activation_date else "today"
                     subject, html = email_referral_active(client_name, referred, act)
                     asyncio.create_task(send_email(client_emails, subject, html))
-                    _send_assembly_message(
-                        assembly_id,
-                        title=f"Referral active: {referred}",
-                        body=f"Your referral is now an active Staffify client! You'll start earning $1.00/hr credits from {act}.",
-                    )
                 elif new_status == ReferralStatus.paused:
                     reason = status_update.notes or ""
                     subject, html = email_referral_paused(client_name, referred, reason)
                     asyncio.create_task(send_email(client_emails, subject, html))
-                    _send_assembly_message(
-                        assembly_id,
-                        title=f"Referral paused: {referred}",
-                        body="Your referral's VA hours have been paused. Credits will resume once they restart.",
-                    )
         except Exception as e:
             print(f"Status-change client email failed: {e}")
 
