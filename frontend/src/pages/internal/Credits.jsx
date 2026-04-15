@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCredits, getCreditSummary, runCreditAutomation, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible } from '../../api/client'
+import { getCredits, getCreditSummary, pullCredits, verifyCredits, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible } from '../../api/client'
 import CreditSummaryComponent from '../../components/CreditSummary'
 import { formatDate, formatCurrency } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
@@ -91,7 +91,8 @@ export default function Credits() {
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
-  const [automationRunning, setAutomationRunning] = useState(false)
+  const [pullRunning, setPullRunning] = useState(false)
+  const [verifyRunning, setVerifyRunning] = useState(false)
   const [applyRunning, setApplyRunning] = useState(false)
   const [editingCredit, setEditingCredit] = useState(null)
   const [recalculating, setRecalculating] = useState(null) // credit id
@@ -125,18 +126,33 @@ export default function Credits() {
   useEffect(() => { load() }, [activeTab])
   useEffect(() => { loadSummary() }, [])
 
-  const handleRunAutomation = async () => {
-    setAutomationRunning(true)
+  const handlePullCredits = async () => {
+    setPullRunning(true)
     setError('')
     setSuccessMsg('')
     try {
-      const result = await runCreditAutomation()
+      const result = await pullCredits()
       setSuccessMsg(result.detail || result.message)
       await Promise.all([load(), loadSummary()])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Credit automation failed.')
+      setError(err?.response?.data?.detail || 'Pull credits failed.')
     } finally {
-      setAutomationRunning(false)
+      setPullRunning(false)
+    }
+  }
+
+  const handleVerifyCredits = async () => {
+    setVerifyRunning(true)
+    setError('')
+    setSuccessMsg('')
+    try {
+      const result = await verifyCredits()
+      setSuccessMsg(result.detail || result.message)
+      await Promise.all([load(), loadSummary()])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Verify credits failed.')
+    } finally {
+      setVerifyRunning(false)
     }
   }
 
@@ -213,8 +229,8 @@ export default function Credits() {
         </div>
         {isOwner && (
           <div className="flex flex-wrap gap-3 self-start sm:self-auto">
-            <button onClick={handleRunAutomation} disabled={automationRunning} className="btn-secondary">
-              {automationRunning ? (
+            <button onClick={handlePullCredits} disabled={pullRunning} className="btn-secondary">
+              {pullRunning ? (
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -224,7 +240,20 @@ export default function Credits() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               )}
-              {automationRunning ? 'Running…' : 'Pull Invoices'}
+              {pullRunning ? 'Pulling…' : 'Pull Credits'}
+            </button>
+            <button onClick={handleVerifyCredits} disabled={verifyRunning} className="btn-secondary">
+              {verifyRunning ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+              )}
+              {verifyRunning ? 'Verifying…' : 'Verify Credits'}
             </button>
             <button onClick={handleApplyCredits} disabled={applyRunning} className="btn-primary">
               {applyRunning ? (
@@ -284,7 +313,7 @@ export default function Credits() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="text-sm text-gray-500">No credits found.</p>
-            <p className="text-xs text-gray-400 mt-1">Click "Pull Invoices" to pull credits from Hubstaff invoices.</p>
+            <p className="text-xs text-gray-400 mt-1">Click "Pull Credits" to pull credits from Hubstaff invoices.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

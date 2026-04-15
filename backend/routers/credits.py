@@ -120,64 +120,111 @@ async def get_credit_summary(
     )
 
 
-@router.post("/run-automation", response_model=MessageResponse)
-async def run_credit_automation(
+@router.post("/pull-credits", response_model=MessageResponse)
+async def pull_credits(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_owner),
 ):
+    """Pull invoices from Hubstaff and create new pending credit entries."""
     try:
         from services.credit_service import CreditService
         service = CreditService(db)
         result = await service.process_bi_weekly_credits()
-        promoted = await service.promote_eligible_credits()
         return MessageResponse(
-            message="Credit automation completed successfully",
-            detail=f"Processed {result['processed']} referrals, created {result['credits_created']} credit entries totaling ${result['total_amount']:.2f}. Promoted {promoted} pending credit(s) to eligible.",
+            message="Credits pulled successfully",
+            detail=f"Processed {result['processed']} referrals, created {result['credits_created']} credit entries totaling ${result['total_amount']:.2f}",
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Automation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Pull credits failed: {str(e)}")
 
 
-@router.post("/cron-trigger", response_model=MessageResponse)
-async def cron_trigger(
-    request: Request,
+@router.post("/verify-credits", response_model=MessageResponse)
+async def verify_credits(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_owner),
 ):
-    """
-    External cron endpoint — no user auth required.
-    Protected by a shared secret passed in the X-Cron-Secret header.
-    Call this from cron-job.org (or any external scheduler) every other Friday at 7 AM ET.
-    """
+    """Check all pending credits against Hubstaff and promote any with closed invoices to eligible."""
+    try:
+        from services.credit_service import CreditService
+        service = CreditService(db)
+        promoted = await service.promote_eligible_credits()
+        return MessageResponse(
+            message="Credits verified successfully",
+            detail=f"Promoted {promoted} pending credit(s) to eligible (Credits Next Invoice)",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Verify credits failed: {str(e)}")
+
+
+def _check_cron_secret(request: Request):
     if not settings.CRON_SECRET:
         raise HTTPException(status_code=503, detail="Cron trigger not configured (CRON_SECRET not set)")
-
     incoming = request.headers.get("X-Cron-Secret", "")
     if not incoming or incoming != settings.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Invalid or missing cron secret")
 
+
+@router.post("/cron-pull", response_model=MessageResponse)
+async def cron_pull(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Cron endpoint — Friday 7:00 AM ET (every other week).
+    Expires old referrals and pulls new pending credits from Hubstaff invoices.
+    """
+    _check_cron_secret(request)
     try:
         from services.credit_service import CreditService
         service = CreditService(db)
-
         expired = await service.check_and_expire_referrals()
         calc = await service.process_bi_weekly_credits()
-        promoted = await service.promote_eligible_credits()
-        apply = await service.apply_pending_credits_to_invoices()
         await db.commit()
-
-        voided = apply.get('voided_excess', 0)
         return MessageResponse(
-            message="Bi-weekly credit automation completed",
-            detail=(
-                f"Expired: {expired} referrals | "
-                f"Credits created: {calc['credits_created']} (${calc['total_amount']:.2f}) | "
-                f"Promoted to eligible: {promoted} | "
-                f"Applied to QBO: {apply['applied']} (${apply['total_applied']:.2f})"
-                + (f" | Voided excess: ${voided:.2f}" if voided else "")
-            ),
+            message="Credit pull completed",
+            detail=f"Expired: {expired} referrals | Credits created: {calc['credits_created']} (${calc['total_amount']:.2f})",
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Cron automation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Cron pull failed: {str(e)}")
+
+
+@router.post("/cron-verify", response_model=MessageResponse)
+async def cron_verify(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Cron endpoint — Wednesday 5:30 PM ET (every week).
+    Checks all pending credits and promotes any with closed Hubstaff invoices to eligible.
+    """
+    _check_cron_secret(request)
+    try:
+        from services.credit_service import CreditService
+        service = CreditService(db)
+        promoted = await service.promote_eligible_credits()
+        await db.commit()
+        return MessageResponse(
+            message="Credit verification completed",
+            detail=f"Promoted {promoted} pending credit(s) to eligible",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cron verify failed: {str(e)}")
+
+
+@router.post("/cron-apply", response_model=MessageResponse)
+async def cron_apply(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Cron endpoint — Friday 2:30 PM ET (every other week).
+    Applies all eligible credits to QBO invoices.
+    """
+    _check_cron_secret(request)
+    try:
+        from services.credit_service import CreditService
+        service = CreditService(db)
+        apply = await service.apply_pending_credits_to_invoices()
+        await db.commit()
+        voided = apply.get('voided_excess', 0)
+        return MessageResponse(
+            message="Credits applied to QBO",
+            detail=f"Applied {apply['applied']} credits (${apply['total_applied']:.2f})"
+                   + (f" | Voided excess: ${voided:.2f}" if voided else ""),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cron apply failed: {str(e)}")
 
 
 @router.put("/{credit_id}", response_model=CreditLedgerOut)

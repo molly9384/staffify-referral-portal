@@ -168,8 +168,11 @@ export const getPendingCredits = () =>
 export const getCreditSummary = () =>
   apiClient.get('/credits/summary').then((r) => r.data)
 
-export const runCreditAutomation = () =>
-  apiClient.post('/credits/run-automation').then((r) => r.data)
+export const pullCredits = () =>
+  apiClient.post('/credits/pull-credits').then((r) => r.data)
+
+export const verifyCredits = () =>
+  apiClient.post('/credits/verify-credits').then((r) => r.data)
 
 export const applyCredits = () =>
   apiClient.post('/credits/apply').then((r) => r.data)
