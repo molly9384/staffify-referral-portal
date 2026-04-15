@@ -7,6 +7,9 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import AcceptInvite from './pages/AcceptInvite'
 import ProtectedRoute from './components/ProtectedRoute'
+import AssemblyEntry from './pages/AssemblyEntry'
+import AssemblyWelcome from './pages/AssemblyWelcome'
+import AssemblySignup from './pages/AssemblySignup'
 
 // Internal pages
 import InternalLayout from './components/InternalLayout'
@@ -37,10 +40,18 @@ function RootRedirect() {
   return <Navigate to="/internal/dashboard" replace />
 }
 
+function RootOrAssembly() {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('token')) return <AssemblyEntry />
+  return <RootRedirect />
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<RootRedirect />} />
+      <Route path="/" element={<RootOrAssembly />} />
+      <Route path="/assembly/welcome" element={<AssemblyWelcome />} />
+      <Route path="/assembly/signup" element={<AssemblySignup />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />

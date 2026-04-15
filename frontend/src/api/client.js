@@ -49,6 +49,12 @@ export const changePassword = (data) =>
 export const forgotPassword = (email) =>
   apiClient.post('/auth/forgot-password', { email }).then((r) => r.data)
 
+export const assemblyExchangeToken = (token) =>
+  apiClient.post('/auth/assembly-token', { token }).then((r) => r.data)
+
+export const assemblySignup = (token, full_name, password) =>
+  apiClient.post('/auth/assembly-signup', { token, full_name, password }).then((r) => r.data)
+
 export const registerClient = (data) =>
   apiClient.post('/auth/register-client', data).then((r) => r.data)
 

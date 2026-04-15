@@ -825,3 +825,189 @@ async def reset_password_endpoint(
     reset_token.used = True
     await db.commit()
     return {"message": "Password reset successfully"}
+
+
+# ── Assembly iFrame Integration ────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BaseModel
+from services.assembly import decrypt_assembly_token, get_assembly_client
+
+
+class AssemblyTokenRequest(_BaseModel):
+    token: str
+
+
+class AssemblyTokenResponse(_BaseModel):
+    status: str                   # "authenticated" or "not_registered"
+    access_token: str | None = None
+    token_type: str | None = None
+    role: str | None = None
+    user_id: str | None = None
+    full_name: str | None = None
+    client_id: str | None = None
+    email: str | None = None      # only when status == "not_registered"
+    name: str | None = None       # only when status == "not_registered"
+
+
+class AssemblySignupRequest(_BaseModel):
+    token: str
+    full_name: str
+    password: str
+
+
+@router.post("/assembly-token", response_model=AssemblyTokenResponse)
+async def assembly_token_login(body: AssemblyTokenRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Exchange an Assembly iFrame session token for a Staffify JWT.
+
+    Returns {"status": "authenticated", ...token fields} if the client already
+    has a portal account matched by email, or {"status": "not_registered",
+    "email": ..., "name": ...} so the frontend can show the signup flow.
+    """
+    if not settings.ASSEMBLY_API_KEY:
+        raise HTTPException(status_code=503, detail="Assembly integration is not configured")
+
+    try:
+        payload = decrypt_assembly_token(settings.ASSEMBLY_API_KEY, body.token)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Assembly token: {e}")
+
+    assembly_client_id = payload.get("clientId")
+    if not assembly_client_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Assembly token does not contain a clientId. Internal users should log in directly."
+        )
+
+    try:
+        assembly_client = get_assembly_client(settings.ASSEMBLY_API_KEY, assembly_client_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    email = assembly_client.get("email", "")
+    name = f"{assembly_client.get('givenName', '')} {assembly_client.get('familyName', '')}".strip()
+
+    # Look up existing portal user by email
+    result = await db.execute(
+        select(User).where(
+            User.email == email,
+            User.role == UserRole.client,
+            User.is_active == True,
+        )
+    )
+    user = result.scalar_one_or_none()
+
+    if user:
+        # Opportunistically save their Assembly client ID for future reference
+        if user.client_id:
+            from models import Client
+            client_result = await db.execute(select(Client).where(Client.id == user.client_id))
+            client = client_result.scalar_one_or_none()
+            if client and not client.assembly_client_id:
+                client.assembly_client_id = assembly_client_id
+                await db.commit()
+
+        access_token = create_access_token(
+            data={"sub": str(user.id), "role": user.role.value},
+            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        )
+        return AssemblyTokenResponse(
+            status="authenticated",
+            access_token=access_token,
+            token_type="bearer",
+            role=user.role.value,
+            user_id=str(user.id),
+            full_name=user.full_name,
+            client_id=str(user.client_id) if user.client_id else None,
+        )
+
+    # No account yet — tell the frontend to show the welcome/signup flow
+    return AssemblyTokenResponse(status="not_registered", email=email, name=name)
+
+
+@router.post("/assembly-signup", response_model=Token)
+async def assembly_signup(body: AssemblySignupRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Create a Staffify portal account for a new client coming from Assembly.
+
+    Decrypts the Assembly token to verify identity and get their email,
+    then creates or links a Client + User record and returns a JWT.
+    """
+    if not settings.ASSEMBLY_API_KEY:
+        raise HTTPException(status_code=503, detail="Assembly integration is not configured")
+
+    try:
+        payload = decrypt_assembly_token(settings.ASSEMBLY_API_KEY, body.token)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Assembly token: {e}")
+
+    assembly_client_id = payload.get("clientId")
+    if not assembly_client_id:
+        raise HTTPException(status_code=403, detail="Token does not belong to a client")
+
+    try:
+        assembly_client = get_assembly_client(settings.ASSEMBLY_API_KEY, assembly_client_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    email = assembly_client.get("email", "")
+
+    # Guard: if they already have an account, just log them in
+    result = await db.execute(select(User).where(User.email == email))
+    existing_user = result.scalar_one_or_none()
+    if existing_user:
+        access_token = create_access_token(
+            data={"sub": str(existing_user.id), "role": existing_user.role.value},
+            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        )
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            role=existing_user.role.value,
+            user_id=str(existing_user.id),
+            full_name=existing_user.full_name,
+            client_id=str(existing_user.client_id) if existing_user.client_id else None,
+        )
+
+    # If a Client record already exists with this email, link to it
+    from models import Client
+    client_result = await db.execute(select(Client).where(Client.email == email))
+    client = client_result.scalar_one_or_none()
+
+    if not client:
+        client = Client(
+            name=body.full_name,
+            email=email,
+            assembly_client_id=assembly_client_id,
+            is_active=True,
+        )
+        db.add(client)
+        await db.flush()
+    elif not client.assembly_client_id:
+        client.assembly_client_id = assembly_client_id
+
+    new_user = User(
+        email=email,
+        hashed_password=get_password_hash(body.password),
+        full_name=body.full_name,
+        role=UserRole.client,
+        client_id=client.id,
+        is_active=True,
+    )
+    db.add(new_user)
+    await db.flush()
+    await db.refresh(new_user)
+    await db.commit()
+
+    access_token = create_access_token(
+        data={"sub": str(new_user.id), "role": new_user.role.value},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        role=new_user.role.value,
+        user_id=str(new_user.id),
+        full_name=new_user.full_name,
+        client_id=str(new_user.client_id) if new_user.client_id else None,
+    )

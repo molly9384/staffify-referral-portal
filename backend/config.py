@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     BASE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:5173"
 
+    ASSEMBLY_API_KEY: str = ""
+
     class Config:
         env_file = ".env"
 
