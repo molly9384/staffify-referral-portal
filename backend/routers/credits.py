@@ -109,6 +109,23 @@ async def get_credit_summary(
     )
     total_earned = total_result.scalar()
 
+    # Current billing period start — bi-weekly anchor April 11 2026
+    from datetime import date as date_type, timedelta
+    anchor = date_type(2026, 4, 11)
+    today = date_type.today()
+    days_since = (today - anchor).days
+    period_start = anchor + timedelta(days=(days_since // 14) * 14)
+
+    period_applied_result = await db.execute(
+        select(func.coalesce(func.sum(CreditLedger.credit_amount), 0))
+        .where(
+            *base_filter,
+            CreditLedger.status == CreditStatus.applied,
+            CreditLedger.applied_date >= period_start,
+        )
+    )
+    period_applied = period_applied_result.scalar()
+
     return CreditSummary(
         total_pending=Decimal(str(pending_row[0])),
         total_eligible=Decimal(str(eligible_row[0])),
@@ -117,6 +134,7 @@ async def get_credit_summary(
         pending_count=pending_row[1],
         eligible_count=eligible_row[1],
         applied_count=applied_row[1],
+        period_applied=Decimal(str(period_applied)),
     )
 
 

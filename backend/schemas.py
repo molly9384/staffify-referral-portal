@@ -271,6 +271,7 @@ class CreditSummary(BaseModel):
     pending_count: int
     eligible_count: int
     applied_count: int
+    period_applied: Decimal = Decimal("0.00")  # Credits applied in the current billing period
 
 
 # --- Hubstaff Schemas ---

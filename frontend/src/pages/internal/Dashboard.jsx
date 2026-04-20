@@ -66,8 +66,8 @@ export default function Dashboard() {
         />
         <StatCard
           label="Credits Pending Application"
-          value={summary ? formatCurrency(summary.total_pending) : null}
-          sub={summary ? `${summary.pending_count} pending` : null}
+          value={summary ? formatCurrency(summary.total_eligible) : null}
+          sub={summary ? `${summary.eligible_count} eligible` : null}
           loading={loading}
           color="amber"
           icon={
@@ -77,8 +77,8 @@ export default function Dashboard() {
           }
         />
         <StatCard
-          label="Total Credits Applied"
-          value={summary ? formatCurrency(summary.total_applied) : null}
+          label="Applied This Billing Period"
+          value={summary ? formatCurrency(summary.period_applied) : null}
           loading={loading}
           color="blue"
           icon={
