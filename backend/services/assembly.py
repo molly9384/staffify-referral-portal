@@ -93,3 +93,50 @@ def get_assembly_client(api_key: str, client_id: str) -> dict:
     return response.json()
 
 
+async def get_all_assembly_clients(api_key: str) -> list:
+    """
+    Fetch all Assembly clients in one call.
+    Returns a list of dicts with: id, givenName, familyName, companyId, etc.
+    """
+    all_clients = []
+    params: dict = {"limit": 500}
+    url = f"{ASSEMBLY_API_BASE}/clients"
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while url:
+            response = await client.get(
+                url,
+                headers={"X-API-KEY": api_key},
+                params=params,
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_clients.extend(data.get("data", []))
+            # Advance cursor if there are more pages
+            cursor = data.get("nextCursor") or data.get("pageInfo", {}).get("cursor")
+            if cursor:
+                params = {"limit": 500, "cursor": cursor}
+            else:
+                url = None
+
+    return all_clients
+
+
+async def update_company_vas(api_key: str, company_id: str, va_value: str) -> dict:
+    """
+    Update the 'Current VA(s)' custom field on an Assembly company record.
+    va_value: comma-separated VA names (e.g. "Jane Smith, John Doe") or "Sourcing"
+    """
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.patch(
+            f"{ASSEMBLY_API_BASE}/companies/{company_id}",
+            headers={
+                "X-API-KEY": api_key,
+                "Content-Type": "application/json",
+            },
+            json={"customFields": {"currentVas": va_value}},
+        )
+        response.raise_for_status()
+        return response.json()
+
+

@@ -89,6 +89,69 @@ async def job_apply_credits():
             logger.error(f"Credit application job failed: {e}", exc_info=True)
 
 
+async def job_sync_vas():
+    """Every 15 minutes — sync Hubstaff project VA assignments to Assembly company records."""
+    logger.info("Starting VA sync job...")
+    try:
+        from services.hubstaff_service import HubstaffService
+        from services.assembly import get_all_assembly_clients, update_company_vas
+        from config import settings
+
+        hubstaff = HubstaffService()
+        org_id = settings.HUBSTAFF_ORG_ID
+        api_key = settings.ASSEMBLY_API_KEY
+
+        # Build a lookup: "First Last" -> Assembly companyId
+        assembly_clients = await get_all_assembly_clients(api_key)
+        name_to_company_id: dict = {}
+        for c in assembly_clients:
+            given = (c.get("givenName") or "").strip()
+            family = (c.get("familyName") or "").strip()
+            full_name = f"{given} {family}".strip()
+            company_id = c.get("companyId")
+            if full_name and company_id:
+                name_to_company_id[full_name] = company_id
+
+        logger.info(f"VA sync: loaded {len(name_to_company_id)} Assembly clients")
+
+        # Get all active Hubstaff projects, skip internal Staffify project
+        projects = await hubstaff.get_projects(org_id)
+        active_projects = [
+            p for p in projects
+            if p.get("status") == "active"
+            and p.get("name", "").strip().lower() != "staffify"
+        ]
+
+        logger.info(f"VA sync: processing {len(active_projects)} active projects")
+
+        for project in active_projects:
+            project_name = project["name"].strip()
+            project_id = project["id"]
+
+            company_id = name_to_company_id.get(project_name)
+            if not company_id:
+                logger.warning(f"VA sync: no Assembly match for '{project_name}' — skipping")
+                continue
+
+            # Get members and filter to role=user only (excludes viewers/admins)
+            members = await hubstaff.get_project_members(project_id)
+            va_names = [
+                m["user"]["name"]
+                for m in members
+                if m.get("membership_role") == "user"
+                and m.get("user", {}).get("name")
+            ]
+
+            va_value = ", ".join(va_names) if va_names else "Sourcing"
+            await update_company_vas(api_key, company_id, va_value)
+            logger.info(f"VA sync: '{project_name}' → '{va_value}'")
+
+        logger.info("VA sync job finished successfully.")
+
+    except Exception as e:
+        logger.error(f"VA sync job failed: {e}", exc_info=True)
+
+
 def start_scheduler():
     """Register all three credit jobs and start the scheduler."""
     from datetime import datetime
@@ -142,12 +205,23 @@ def start_scheduler():
         misfire_grace_time=3600,
     )
 
+    # Job 4: Sync VA names to Assembly — every 15 minutes
+    scheduler.add_job(
+        job_sync_vas,
+        trigger=CronTrigger(minute="*/15", timezone="America/New_York"),
+        id="job_sync_vas",
+        name="Every 15 min: Sync VA Names to Assembly",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
     scheduler.start()
     logger.info(
         "APScheduler started — "
         "Pull: every other Friday 7:00 AM ET | "
         "Verify: every Wednesday 5:30 PM ET | "
-        "Apply: every other Friday 2:30 PM ET"
+        "Apply: every other Friday 2:30 PM ET | "
+        "VA Sync: every 15 min"
     )
 
 
