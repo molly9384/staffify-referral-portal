@@ -1,74 +1,53 @@
 import { useState, useEffect, useCallback } from 'react'
 
-// API base: use env var in prod, fall back to relative path (dev proxy)
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
 function getToken() {
   return new URLSearchParams(window.location.search).get('token') || ''
 }
 
-// ── Status badge ──────────────────────────────────────────────────────────────
-function StatusBadge({ status }) {
-  const map = {
-    paid:    'bg-green-100 text-green-700',
-    sent:    'bg-blue-100 text-blue-700',
-    draft:   'bg-gray-100 text-gray-600',
-    overdue: 'bg-red-100 text-red-700',
-    void:    'bg-gray-100 text-gray-400',
-    voided:  'bg-gray-100 text-gray-400',
-  }
-  const cls = map[(status || '').toLowerCase()] ?? 'bg-gray-100 text-gray-500'
-  const label = status
-    ? status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
-    : '—'
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
-      {label}
-    </span>
-  )
-}
-
-// ── Hours block card ──────────────────────────────────────────────────────────
-function HoursCard({ block }) {
-  const [expanded, setExpanded] = useState(false)
+// ── Individual hours card ─────────────────────────────────────────────────────
+function HoursCard({ block, accent }) {
   const hasVAs = block.by_va && block.by_va.length > 0
 
+  const accentStyles = {
+    today:   { bar: 'bg-primary-600', text: 'text-primary-700', light: 'bg-primary-50', dot: 'bg-primary-400' },
+    week:    { bar: 'bg-primary-500', text: 'text-primary-700', light: 'bg-primary-50', dot: 'bg-primary-400' },
+    period:  { bar: 'bg-primary-700', text: 'text-primary-800', light: 'bg-primary-50', dot: 'bg-primary-500' },
+  }
+  const s = accentStyles[accent] || accentStyles.today
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-3 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{block.label}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-0.5">{block.total_formatted}</p>
-        </div>
-        {hasVAs && (
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-            aria-label={expanded ? 'Collapse' : 'Expand'}
-          >
-            <svg
-              className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* Colored top bar */}
+      <div className={`${s.bar} px-5 py-4`}>
+        <p className="text-white/80 text-xs font-semibold uppercase tracking-widest mb-1">
+          {block.label}
+        </p>
+        <p className="text-white text-3xl font-bold leading-none">
+          {block.total_formatted}
+        </p>
+        {block.total_seconds === 0 && (
+          <p className="text-white/60 text-xs mt-1">No hours tracked yet</p>
         )}
       </div>
 
-      {expanded && hasVAs && (
-        <div className="border-t border-gray-100 divide-y divide-gray-50">
+      {/* VA breakdown — always visible */}
+      {hasVAs && (
+        <div className="divide-y divide-gray-50">
           {block.by_va.map((va) => (
-            <div key={va.name} className="flex items-center justify-between px-4 py-2.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-6 h-6 rounded-full bg-primary-100 flex-shrink-0 flex items-center justify-center">
-                  <span className="text-primary-700 text-xs font-semibold">
+            <div key={va.name} className="flex items-center justify-between px-5 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-7 h-7 rounded-full ${s.light} flex-shrink-0 flex items-center justify-center`}>
+                  <span className={`${s.text} text-xs font-bold`}>
                     {va.name.charAt(0).toUpperCase()}
                   </span>
                 </div>
-                <span className="text-sm text-gray-700 truncate">{va.name}</span>
+                <span className="text-sm font-medium text-gray-700 truncate">{va.name}</span>
               </div>
-              <span className="text-sm font-medium text-gray-900 ml-4 flex-shrink-0">{va.formatted}</span>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                <span className={`text-sm font-bold ${s.text}`}>{va.formatted}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -77,13 +56,15 @@ function HoursCard({ block }) {
   )
 }
 
-// ── Hours tab ─────────────────────────────────────────────────────────────────
-function HoursTab({ token }) {
+// ── Main widget ───────────────────────────────────────────────────────────────
+export default function App() {
+  const token = getToken()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
+    if (!token) return
     setLoading(true)
     setError('')
     try {
@@ -102,262 +83,70 @@ function HoursTab({ token }) {
 
   useEffect(() => { load() }, [load])
 
-  if (loading) {
-    return (
-      <div className="space-y-3 p-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />
-        ))}
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="p-4">
-        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-        <button onClick={load} className="mt-3 text-sm text-primary-600 hover:text-primary-700 font-medium">
-          Try again
-        </button>
-      </div>
-    )
-  }
-
-  if (!data) return null
-
-  return (
-    <div className="p-4 space-y-3">
-      <HoursCard block={data.today} />
-      <HoursCard block={data.this_week} />
-      <HoursCard block={data.billing_period} />
-      <p className="text-center text-xs text-gray-400 pt-1">
-        Tap any card to see hours by VA
-      </p>
-    </div>
-  )
-}
-
-// ── Invoices tab ──────────────────────────────────────────────────────────────
-function InvoicesTab({ token }) {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [expanded, setExpanded] = useState(null)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const res = await fetch(`${API_BASE}/api/widget/invoices?token=${encodeURIComponent(token)}`)
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || `Error ${res.status}`)
-      }
-      setData(await res.json())
-    } catch (e) {
-      setError(e.message || 'Failed to load invoices.')
-    } finally {
-      setLoading(false)
-    }
-  }, [token])
-
-  useEffect(() => { load() }, [load])
-
-  const handleDownload = (invoiceId, invoiceNumber) => {
-    const url = `${API_BASE}/api/widget/invoices/${invoiceId}/pdf?token=${encodeURIComponent(token)}`
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
-
-  const formatDate = (str) => {
-    if (!str) return '—'
-    try {
-      return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    } catch {
-      return str
-    }
-  }
-
-  const formatAmount = (amount, currency) => {
-    if (amount == null) return '—'
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount
-    if (isNaN(num)) return amount
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(num)
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-3 p-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />
-        ))}
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="p-4">
-        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-        <button onClick={load} className="mt-3 text-sm text-primary-600 hover:text-primary-700 font-medium">
-          Try again
-        </button>
-      </div>
-    )
-  }
-
-  if (!data) return null
-
-  const invoices = data.invoices || []
-
-  if (invoices.length === 0) {
-    return (
-      <div className="p-8 text-center">
-        <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 14H6a3 3 0 01-3-3V6a3 3 0 013-3h12a3 3 0 013 3v5a3 3 0 01-3 3h-3m-3 4l-3-3m0 0l3-3m-3 3h12" />
-        </svg>
-        <p className="text-sm text-gray-500">No invoices found.</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="p-4 space-y-2">
-      {invoices.map((inv) => {
-        const isOpen = expanded === inv.id
-        return (
-          <div key={inv.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            {/* Invoice row */}
-            <div
-              className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
-              onClick={() => setExpanded(isOpen ? null : inv.id)}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-gray-900">{inv.number}</span>
-                  <StatusBadge status={inv.status} />
-                </div>
-                <p className="text-xs text-gray-500 mt-0.5">{formatDate(inv.date)}</p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-sm font-bold text-gray-900">{formatAmount(inv.total, inv.currency)}</p>
-                {inv.due_date && (
-                  <p className="text-xs text-gray-400">Due {formatDate(inv.due_date)}</p>
-                )}
-              </div>
-              <svg
-                className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-
-            {/* Expanded detail */}
-            {isOpen && (
-              <div className="border-t border-gray-100 px-4 py-3 space-y-3">
-                {/* Line items */}
-                {inv.line_items && inv.line_items.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Line Items</p>
-                    <div className="space-y-1.5">
-                      {inv.line_items.map((li, idx) => (
-                        <div key={idx} className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm text-gray-700">{li.description}</p>
-                            {li.hours != null && (
-                              <p className="text-xs text-gray-400">{li.hours} hrs</p>
-                            )}
-                          </div>
-                          {li.amount != null && (
-                            <p className="text-sm font-medium text-gray-900 flex-shrink-0">
-                              {formatAmount(li.amount, inv.currency)}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Download PDF button */}
-                <button
-                  onClick={() => handleDownload(inv.id, inv.number)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download PDF
-                </button>
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Root App ──────────────────────────────────────────────────────────────────
-export default function App() {
-  const token = getToken()
-  const [tab, setTab] = useState('hours')
-
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 font-sans">
-        <div className="text-center">
-          <p className="text-sm text-gray-500">No token provided. This widget must be opened from Assembly.</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center p-6 font-sans bg-gray-50">
+        <p className="text-sm text-gray-400">This widget must be opened from Assembly.</p>
       </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-      {/* Tab bar */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
-        <div className="flex">
-          <button
-            onClick={() => setTab('hours')}
-            className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              tab === 'hours'
-                ? 'border-primary-600 text-primary-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-1.5">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Hours
-            </div>
-          </button>
-          <button
-            onClick={() => setTab('invoices')}
-            className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              tab === 'invoices'
-                ? 'border-primary-600 text-primary-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-1.5">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 14H6a3 3 0 01-3-3V6a3 3 0 013-3h12a3 3 0 013 3v5a3 3 0 01-3 3h-3m-3 4l-3-3m0 0l3-3m-3 3h12" />
-              </svg>
-              Invoices
-            </div>
-          </button>
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h1 className="text-sm font-bold text-gray-900 tracking-wide uppercase">
+            VA Hours
+            {data?.client_name && (
+              <span className="ml-2 text-gray-400 font-normal normal-case tracking-normal">
+                — {data.client_name}
+              </span>
+            )}
+          </h1>
         </div>
       </div>
 
-      {/* Tab content */}
-      {tab === 'hours' && <HoursTab token={token} />}
-      {tab === 'invoices' && <InvoicesTab token={token} />}
+      {/* Content */}
+      <div className="p-4 space-y-3">
+        {loading && (
+          <>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-2xl overflow-hidden shadow-sm">
+                <div className="h-20 bg-primary-200 animate-pulse" />
+                <div className="bg-white p-4 space-y-3">
+                  {[1, 2].map((j) => (
+                    <div key={j} className="h-8 bg-gray-100 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
+        {error && (
+          <div className="rounded-2xl bg-red-50 border border-red-100 px-5 py-4">
+            <p className="text-sm text-red-600 font-medium">{error}</p>
+            <button
+              onClick={load}
+              className="mt-2 text-xs font-semibold text-red-500 hover:text-red-700 underline underline-offset-2"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && data && (
+          <>
+            <HoursCard block={data.today} accent="today" />
+            <HoursCard block={data.this_week} accent="week" />
+            <HoursCard block={data.billing_period} accent="period" />
+          </>
+        )}
+      </div>
     </div>
   )
 }

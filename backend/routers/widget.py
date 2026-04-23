@@ -13,7 +13,6 @@ Billing period logic (separate from referral portal):
 
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
 
 import logging
 from config import settings
@@ -239,92 +238,3 @@ async def get_hours(token: str = Query(...)):
     }
 
 
-# ---------------------------------------------------------------------------
-# Invoices endpoint
-# ---------------------------------------------------------------------------
-
-@router.get("/invoices")
-async def get_invoices(token: str = Query(...)):
-    """
-    Return all Hubstaff client invoices for this company, newest first.
-    Authenticated via Assembly iFrame token.
-    """
-    project_id, project_name = await get_hubstaff_project_for_token(token)
-
-    from services.hubstaff_service import HubstaffService
-    hubstaff = HubstaffService()
-    org_id = settings.HUBSTAFF_ORG_ID
-
-    invoices = await hubstaff.get_invoices(
-        organization_id=org_id,
-        client_name=project_name,
-        include_all_statuses=True,
-    )
-
-    # Sort newest first
-    invoices.sort(key=lambda i: i.get("date") or i.get("created_at") or "", reverse=True)
-
-    result = []
-    for inv in invoices:
-        line_items = [
-            {
-                "description": li.get("description") or li.get("project_name") or "—",
-                "hours": round(float(li.get("hours") or li.get("duration", 0)) / 3600, 2)
-                         if (li.get("hours") or li.get("duration")) else None,
-                "amount": li.get("bill_amount") or li.get("amount"),
-            }
-            for li in (inv.get("line_items") or [])
-        ]
-        result.append({
-            "id": str(inv.get("id", "")),
-            "number": inv.get("number") or inv.get("invoice_number") or f"#{inv.get('id','')}",
-            "status": inv.get("status", ""),
-            "date": inv.get("date") or inv.get("created_at", ""),
-            "due_date": inv.get("due_date"),
-            "total": inv.get("bill_amount") or inv.get("amount") or inv.get("total"),
-            "currency": inv.get("currency", "USD"),
-            "line_items": line_items,
-        })
-
-    return {"client_name": project_name, "invoices": result}
-
-
-# ---------------------------------------------------------------------------
-# Invoice PDF proxy
-# ---------------------------------------------------------------------------
-
-@router.get("/invoices/{invoice_id}/pdf")
-async def get_invoice_pdf(invoice_id: str, token: str = Query(...)):
-    """
-    Proxy the Hubstaff invoice PDF download.
-    Authenticated via Assembly iFrame token.
-    """
-    # Verify token is valid (auth check) — project_id not needed for PDF proxy
-    await get_hubstaff_project_for_token(token)
-
-    from services.hubstaff_service import HubstaffService
-    import httpx
-
-    hubstaff = HubstaffService()
-    org_id = settings.HUBSTAFF_ORG_ID
-
-    pdf_url = (
-        f"https://api.hubstaff.com/v2/organizations/{org_id}"
-        f"/client_invoices/{invoice_id}/download"
-    )
-
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as http:
-        response = await http.get(pdf_url, headers=hubstaff.headers)
-        if response.status_code == 404:
-            raise HTTPException(status_code=404, detail="Invoice PDF not found")
-        if not response.is_success:
-            raise HTTPException(status_code=502, detail="Failed to fetch PDF from Hubstaff")
-
-        content_type = response.headers.get("content-type", "application/pdf")
-        return StreamingResponse(
-            iter([response.content]),
-            media_type=content_type,
-            headers={
-                "Content-Disposition": f'attachment; filename="invoice-{invoice_id}.pdf"'
-            },
-        )
