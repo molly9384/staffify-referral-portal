@@ -376,6 +376,19 @@ async def delete_credit(
     await db.commit()
 
 
+@router.post("/sync-vas", response_model=MessageResponse)
+async def sync_vas(
+    current_user: User = Depends(require_owner),
+):
+    """Manually trigger the Assembly VA sync job."""
+    try:
+        from scheduler import job_sync_vas
+        await job_sync_vas()
+        return MessageResponse(message="VA sync completed successfully")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"VA sync failed: {str(e)}")
+
+
 @router.post("/apply", response_model=MessageResponse)
 async def apply_pending_credits(
     db: AsyncSession = Depends(get_db),

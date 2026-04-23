@@ -23,6 +23,7 @@ import Credits from './pages/internal/Credits'
 import Settings from './pages/internal/Settings'
 import PortalUsers from './pages/internal/PortalUsers'
 import AdminReports from './pages/internal/Reports'
+import AssemblyPage from './pages/internal/Assembly'
 
 // Client portal pages
 import ClientLayout from './components/ClientLayout'
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="portal-users" element={<PortalUsers />} />
         <Route path="reports" element={<AdminReports />} />
+        <Route path="assembly" element={<AssemblyPage />} />
       </Route>
 
       {/* Client portal routes */}

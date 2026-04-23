@@ -60,6 +60,16 @@ const navItems = [
     ),
   },
   {
+    to: '/internal/assembly',
+    label: 'Assembly',
+    ownerOnly: true,
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    ),
+  },
+  {
     to: '/internal/settings',
     label: 'Settings',
     icon: (
@@ -129,7 +139,7 @@ export default function InternalLayout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
+        {navItems.filter((item) => !item.ownerOnly || user?.role === 'owner').map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

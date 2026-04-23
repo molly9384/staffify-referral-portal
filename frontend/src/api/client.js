@@ -177,6 +177,9 @@ export const verifyCredits = () =>
 export const applyCredits = () =>
   apiClient.post('/credits/apply').then((r) => r.data)
 
+export const syncVas = () =>
+  apiClient.post('/credits/sync-vas').then((r) => r.data)
+
 export const updateCredit = (id, data) =>
   apiClient.put(`/credits/${id}`, data).then((r) => r.data)
 
