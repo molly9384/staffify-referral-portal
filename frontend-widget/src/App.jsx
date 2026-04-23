@@ -6,16 +6,29 @@ function getToken() {
   return new URLSearchParams(window.location.search).get('token') || ''
 }
 
-// ── Individual hours card ─────────────────────────────────────────────────────
-function HoursCard({ block, accent }) {
-  const hasVAs = block.by_va && block.by_va.length > 0
+// Distinct avatar colors — assigned per VA name so they stay consistent across all three cards
+const AVATAR_PALETTE = [
+  { bg: 'bg-sky-100',     text: 'text-sky-700'     },
+  { bg: 'bg-violet-100',  text: 'text-violet-700'   },
+  { bg: 'bg-emerald-100', text: 'text-emerald-700'  },
+  { bg: 'bg-amber-100',   text: 'text-amber-700'    },
+  { bg: 'bg-rose-100',    text: 'text-rose-700'     },
+  { bg: 'bg-orange-100',  text: 'text-orange-700'   },
+  { bg: 'bg-indigo-100',  text: 'text-indigo-700'   },
+  { bg: 'bg-teal-100',    text: 'text-teal-700'     },
+]
 
-  const accentStyles = {
-    today:   { bar: 'bg-primary-600', text: 'text-primary-700', light: 'bg-primary-50', dot: 'bg-primary-400' },
-    week:    { bar: 'bg-primary-500', text: 'text-primary-700', light: 'bg-primary-50', dot: 'bg-primary-400' },
-    period:  { bar: 'bg-primary-700', text: 'text-primary-800', light: 'bg-primary-50', dot: 'bg-primary-500' },
-  }
-  const s = accentStyles[accent] || accentStyles.today
+// Card accent styles — each period gets its own distinct color
+const ACCENT_STYLES = {
+  today:  { bar: 'bg-primary-600',  text: 'text-primary-700'  },
+  week:   { bar: 'bg-emerald-600',  text: 'text-emerald-700'  },
+  period: { bar: 'bg-violet-600',   text: 'text-violet-700'   },
+}
+
+// ── Individual hours card ─────────────────────────────────────────────────────
+function HoursCard({ block, accent, vaColorMap }) {
+  const hasVAs = block.by_va && block.by_va.length > 0
+  const s = ACCENT_STYLES[accent] || ACCENT_STYLES.today
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -35,21 +48,22 @@ function HoursCard({ block, accent }) {
       {/* VA breakdown — always visible */}
       {hasVAs && (
         <div className="divide-y divide-gray-50">
-          {block.by_va.map((va) => (
-            <div key={va.name} className="flex items-center justify-between px-5 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-7 h-7 rounded-full ${s.light} flex-shrink-0 flex items-center justify-center`}>
-                  <span className={`${s.text} text-xs font-bold`}>
-                    {va.name.charAt(0).toUpperCase()}
-                  </span>
+          {block.by_va.map((va) => {
+            const avatar = vaColorMap[va.name] || AVATAR_PALETTE[0]
+            return (
+              <div key={va.name} className="flex items-center justify-between px-5 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-7 h-7 rounded-full ${avatar.bg} flex-shrink-0 flex items-center justify-center`}>
+                    <span className={`${avatar.text} text-xs font-bold`}>
+                      {va.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-800 truncate">{va.name}</span>
                 </div>
-                <span className="text-sm font-medium text-gray-700 truncate">{va.name}</span>
+                <span className={`text-xs font-bold flex-shrink-0 ml-4 ${s.text}`}>{va.formatted}</span>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                <span className={`text-sm font-bold ${s.text}`}>{va.formatted}</span>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -90,6 +104,18 @@ export default function App() {
 
   useEffect(() => { load() }, [load])
 
+  // Build a stable VA → avatar-color map from all unique names across all three cards
+  const vaColorMap = (() => {
+    if (!data) return {}
+    const names = [
+      ...(data.today?.by_va || []),
+      ...(data.this_week?.by_va || []),
+      ...(data.billing_period?.by_va || []),
+    ].map(v => v.name)
+    const unique = [...new Set(names)].sort()
+    return Object.fromEntries(unique.map((name, i) => [name, AVATAR_PALETTE[i % AVATAR_PALETTE.length]]))
+  })()
+
   if (!token) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 font-sans bg-gray-50">
@@ -122,9 +148,13 @@ export default function App() {
       <div className="p-4 space-y-3">
         {loading && (
           <>
-            {[1, 2, 3].map((i) => (
+            {[
+              'bg-primary-200',
+              'bg-emerald-200',
+              'bg-violet-200',
+            ].map((color, i) => (
               <div key={i} className="rounded-2xl overflow-hidden shadow-sm">
-                <div className="h-20 bg-primary-200 animate-pulse" />
+                <div className={`h-20 ${color} animate-pulse`} />
                 <div className="bg-white p-4 space-y-3">
                   {[1, 2].map((j) => (
                     <div key={j} className="h-8 bg-gray-100 rounded-lg animate-pulse" />
@@ -176,9 +206,9 @@ export default function App() {
 
         {!loading && !error && data && (
           <>
-            <HoursCard block={data.today} accent="today" />
-            <HoursCard block={data.this_week} accent="week" />
-            <HoursCard block={data.billing_period} accent="period" />
+            <HoursCard block={data.today}          accent="today"  vaColorMap={vaColorMap} />
+            <HoursCard block={data.this_week}       accent="week"   vaColorMap={vaColorMap} />
+            <HoursCard block={data.billing_period}  accent="period" vaColorMap={vaColorMap} />
           </>
         )}
       </div>
