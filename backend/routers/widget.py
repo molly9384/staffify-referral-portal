@@ -51,12 +51,21 @@ def format_seconds(seconds: float) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Token validation
+# Token → Hubstaff project resolution
 # ---------------------------------------------------------------------------
 
-def get_company_id_from_token(token: str) -> str:
-    """Decrypt Assembly token and return companyId."""
-    # Use the iFrame-specific key if set, otherwise fall back to the main API key
+async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
+    """
+    Decrypt Assembly iFrame token and resolve to the matching Hubstaff project.
+    Returns (project_id, project_name).
+
+    Uses the same name-matching logic as the VA sync job:
+      Assembly client name ──(reverse overrides)──► Hubstaff project name
+
+    Fast path: uses clientId from the token to call GET /clients/{id} (1 API call).
+    Fallback: scans all Assembly clients for the matching companyId.
+    """
+    # 1. Decrypt token
     iframe_key = settings.ASSEMBLY_IFRAME_KEY or settings.ASSEMBLY_API_KEY
     if not iframe_key:
         raise HTTPException(status_code=503, detail="Assembly not configured")
@@ -66,26 +75,72 @@ def get_company_id_from_token(token: str) -> str:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
     company_id = payload.get("companyId")
+    client_id = payload.get("clientId")
+
     if not company_id:
         raise HTTPException(status_code=400, detail="Token does not contain a companyId")
-    return company_id
 
+    if not settings.ASSEMBLY_API_KEY:
+        raise HTTPException(status_code=503, detail="Assembly API not configured")
 
-# ---------------------------------------------------------------------------
-# DB helper
-# ---------------------------------------------------------------------------
+    # 2. Resolve Assembly client name for this company
+    assembly_name: str | None = None
 
-async def get_client_by_company_id(company_id: str):
-    """Look up a Client record by assembly_company_id."""
-    from database import AsyncSessionLocal
-    from models import Client
-    from sqlalchemy import select
+    if client_id:
+        # Fast path: single Assembly client lookup
+        import asyncio
+        from services.assembly import get_assembly_client
+        try:
+            client_data = await asyncio.to_thread(
+                get_assembly_client, settings.ASSEMBLY_API_KEY, client_id
+            )
+            given = (client_data.get("givenName") or "").strip()
+            family = (client_data.get("familyName") or "").strip()
+            full = f"{given} {family}".strip()
+            if full:
+                assembly_name = full
+        except Exception:
+            pass  # fall through to bulk lookup
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Client).where(Client.assembly_company_id == company_id)
-        )
-        return result.scalar_one_or_none()
+    if not assembly_name:
+        # Fallback: scan all Assembly clients for this companyId
+        from services.assembly import get_all_assembly_clients
+        try:
+            all_clients = await get_all_assembly_clients(settings.ASSEMBLY_API_KEY)
+            for c in all_clients:
+                if c.get("companyId") == company_id:
+                    given = (c.get("givenName") or "").strip()
+                    family = (c.get("familyName") or "").strip()
+                    full = f"{given} {family}".strip()
+                    if full:
+                        assembly_name = full
+                        break
+        except Exception:
+            pass
+
+    if not assembly_name:
+        raise HTTPException(status_code=404, detail="No project found for this company")
+
+    # 3. Reverse-map Assembly client name → Hubstaff project name
+    #    (HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES maps Hubstaff → Assembly, so we invert it)
+    from scheduler import HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES
+    assembly_to_hubstaff = {v: k for k, v in HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES.items()}
+    hubstaff_project_name = assembly_to_hubstaff.get(assembly_name, assembly_name)
+
+    # 4. Find the Hubstaff project by name
+    from services.hubstaff_service import HubstaffService
+    hubstaff = HubstaffService()
+    org_id = settings.HUBSTAFF_ORG_ID
+    try:
+        projects = await hubstaff.get_projects(org_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch Hubstaff projects: {e}")
+
+    for p in projects:
+        if p.get("name", "").strip().lower() == hubstaff_project_name.lower():
+            return str(p["id"]), p["name"].strip()
+
+    raise HTTPException(status_code=404, detail="No project found for this company")
 
 
 # ---------------------------------------------------------------------------
@@ -98,18 +153,11 @@ async def get_hours(token: str = Query(...)):
     Return VA hours for today, this week, and the current billing period.
     Authenticated via Assembly iFrame token.
     """
-    company_id = get_company_id_from_token(token)
-
-    client = await get_client_by_company_id(company_id)
-    if not client:
-        raise HTTPException(status_code=404, detail="No project found for this company")
-    if not client.hubstaff_project_id:
-        raise HTTPException(status_code=404, detail="No Hubstaff project configured for this client")
+    project_id, project_name = await get_hubstaff_project_for_token(token)
 
     from services.hubstaff_service import HubstaffService
     hubstaff = HubstaffService()
     org_id = settings.HUBSTAFF_ORG_ID
-    project_id = client.hubstaff_project_id
 
     today = date.today()
     week_start = get_week_start(today)
@@ -169,7 +217,7 @@ async def get_hours(token: str = Query(...)):
     period_totals = aggregate(period_start, today)
 
     return {
-        "client_name": client.name,
+        "client_name": project_name,
         "today": build_block(
             today_totals,
             today.strftime("Today — %A, %B %-d"),
@@ -195,13 +243,7 @@ async def get_invoices(token: str = Query(...)):
     Return all Hubstaff client invoices for this company, newest first.
     Authenticated via Assembly iFrame token.
     """
-    company_id = get_company_id_from_token(token)
-
-    client = await get_client_by_company_id(company_id)
-    if not client:
-        raise HTTPException(status_code=404, detail="No project found for this company")
-    if not client.hubstaff_project_name:
-        raise HTTPException(status_code=404, detail="No Hubstaff project name configured for this client")
+    project_id, project_name = await get_hubstaff_project_for_token(token)
 
     from services.hubstaff_service import HubstaffService
     hubstaff = HubstaffService()
@@ -209,7 +251,7 @@ async def get_invoices(token: str = Query(...)):
 
     invoices = await hubstaff.get_invoices(
         organization_id=org_id,
-        client_name=client.hubstaff_project_name,
+        client_name=project_name,
         include_all_statuses=True,
     )
 
@@ -218,7 +260,6 @@ async def get_invoices(token: str = Query(...)):
 
     result = []
     for inv in invoices:
-        # Summarise line items
         line_items = [
             {
                 "description": li.get("description") or li.get("project_name") or "—",
@@ -239,7 +280,7 @@ async def get_invoices(token: str = Query(...)):
             "line_items": line_items,
         })
 
-    return {"client_name": client.name, "invoices": result}
+    return {"client_name": project_name, "invoices": result}
 
 
 # ---------------------------------------------------------------------------
@@ -252,12 +293,8 @@ async def get_invoice_pdf(invoice_id: str, token: str = Query(...)):
     Proxy the Hubstaff invoice PDF download.
     Authenticated via Assembly iFrame token.
     """
-    company_id = get_company_id_from_token(token)
-
-    # Verify the client exists and owns this invoice
-    client = await get_client_by_company_id(company_id)
-    if not client:
-        raise HTTPException(status_code=404, detail="No project found for this company")
+    # Verify token is valid (auth check) — project_id not needed for PDF proxy
+    await get_hubstaff_project_for_token(token)
 
     from services.hubstaff_service import HubstaffService
     import httpx
