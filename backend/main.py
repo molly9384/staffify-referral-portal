@@ -112,6 +112,7 @@ app.add_middleware(
     allow_origins=[
         settings.FRONTEND_URL,
         "https://referral.gostaffify.com",
+        "https://staffify-referral-frontend.onrender.com",
         "http://localhost:5173",
         "http://localhost:3000",
         "https://*.assembly.com",
