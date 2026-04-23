@@ -94,6 +94,7 @@ class ClientBase(BaseModel):
     qbo_customer_id: Optional[str] = None
     hubstaff_project_id: Optional[str] = None
     hubstaff_project_name: Optional[str] = None
+    assembly_company_id: Optional[str] = None
     is_active: bool = True
 
 
@@ -107,6 +108,7 @@ class ClientUpdate(BaseModel):
     qbo_customer_id: Optional[str] = None
     hubstaff_project_id: Optional[str] = None
     hubstaff_project_name: Optional[str] = None
+    assembly_company_id: Optional[str] = None
     is_active: Optional[bool] = None
 
 

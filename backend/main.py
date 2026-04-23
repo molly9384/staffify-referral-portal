@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from database import engine, Base
-from routers import auth, clients, referrals, vas, credits, hubstaff, qbo, dashboard, reports
+from routers import auth, clients, referrals, vas, credits, hubstaff, qbo, dashboard, reports, widget
 from scheduler import start_scheduler, stop_scheduler
 
 
@@ -74,13 +74,19 @@ async def lifespan(app: FastAPI):
             await conn.execute(text(col_sql))
         await conn.commit()
 
-    # Add Assembly integration column if it doesn't exist
+    # Add Assembly integration columns if they don't exist
     async with engine.connect() as conn:
         await conn.execute(text(
             "ALTER TABLE clients ADD COLUMN IF NOT EXISTS assembly_client_id VARCHAR(100)"
         ))
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_clients_assembly_client_id ON clients (assembly_client_id)"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS assembly_company_id VARCHAR(100)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_clients_assembly_company_id ON clients (assembly_company_id)"
         ))
         await conn.commit()
 
@@ -117,6 +123,8 @@ app.add_middleware(
         "http://localhost:3000",
         "https://*.assembly.com",
         "https://app.assembly.com",
+        # Widget (Assembly Custom App iFrame) — add deployed widget URL here once known
+        "http://localhost:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -133,6 +141,7 @@ app.include_router(hubstaff.router, tags=["Hubstaff"])
 app.include_router(qbo.router, prefix="/api/qbo", tags=["QuickBooks Online"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
+app.include_router(widget.router, prefix="/api/widget", tags=["Widget"])
 
 
 @app.get("/health")

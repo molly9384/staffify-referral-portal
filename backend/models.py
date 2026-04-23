@@ -67,6 +67,7 @@ class Client(Base):
     hubstaff_project_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     hubstaff_project_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     assembly_client_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    assembly_company_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
