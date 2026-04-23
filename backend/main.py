@@ -123,7 +123,8 @@ app.add_middleware(
         "http://localhost:3000",
         "https://*.assembly.com",
         "https://app.assembly.com",
-        # Widget (Assembly Custom App iFrame) — add deployed widget URL here once known
+        # Widget (Assembly Custom App iFrame)
+        "https://staffify-assembly-widget.onrender.com",
         "http://localhost:5174",
     ],
     allow_credentials=True,
