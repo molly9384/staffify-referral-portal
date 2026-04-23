@@ -198,6 +198,24 @@ async def job_sync_vas():
                 logger.info(f"VA sync: '{project_name}' → '{va_value}'")
             except Exception as e:
                 logger.error(f"VA sync: failed to update Assembly for '{project_name}': {e}")
+                continue
+
+            # Auto-populate assembly_company_id on the matching Client record so the
+            # hours/invoices widget can look up by companyId without any manual mapping.
+            try:
+                from database import AsyncSessionLocal
+                from models import Client
+                from sqlalchemy import update as sa_update
+
+                async with AsyncSessionLocal() as db:
+                    await db.execute(
+                        sa_update(Client)
+                        .where(Client.hubstaff_project_id == str(project_id))
+                        .values(assembly_company_id=company_id)
+                    )
+                    await db.commit()
+            except Exception as e:
+                logger.warning(f"VA sync: could not write assembly_company_id for '{project_name}': {e}")
 
         # ── Step 3: Mark Assembly companies with no Hubstaff project ───────
         unhandled_company_ids = all_company_ids - handled_company_ids

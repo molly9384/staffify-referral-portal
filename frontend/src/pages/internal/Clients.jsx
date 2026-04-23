@@ -22,7 +22,6 @@ export default function Clients() {
     qbo_customer_id: '',
     hubstaff_project_id: '',
     hubstaff_project_name: '',
-    assembly_company_id: '',
     is_active: true,
   }
   const [form, setForm] = useState(emptyForm)
@@ -66,7 +65,6 @@ export default function Clients() {
       qbo_customer_id: client.qbo_customer_id || '',
       hubstaff_project_id: client.hubstaff_project_id || '',
       hubstaff_project_name: client.hubstaff_project_name || '',
-      assembly_company_id: client.assembly_company_id || '',
       is_active: client.is_active,
     })
     setQboStatus(client.qbo_customer_id ? 'found' : '')
@@ -98,7 +96,6 @@ export default function Clients() {
         qbo_customer_id: form.qbo_customer_id || null,
         hubstaff_project_id: form.hubstaff_project_id || null,
         hubstaff_project_name: form.hubstaff_project_name || null,
-        assembly_company_id: form.assembly_company_id || null,
       }
       if (editingClient) {
         await updateClient(editingClient.id, payload)
@@ -325,23 +322,6 @@ export default function Clients() {
                 <div>
                   <label className="label">Email <span className="text-gray-400 font-normal">(auto-filled)</span></label>
                   <input type="email" className="input" placeholder="Auto-filled from QBO" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="label">
-                    Assembly Company ID
-                    <span className="text-gray-400 font-normal ml-1">(for hours widget)</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="input font-mono"
-                    placeholder="e.g. comp_abc123"
-                    value={form.assembly_company_id}
-                    onChange={(e) => setForm((f) => ({ ...f, assembly_company_id: e.target.value }))}
-                  />
-                  <p className="text-xs text-gray-400 mt-1">
-                    Found in Assembly → Company Settings → Company ID. Required for the hours &amp; invoices widget.
-                  </p>
                 </div>
 
                 <div className="col-span-2 flex items-center gap-3">
