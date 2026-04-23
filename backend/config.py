@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
 
     ASSEMBLY_API_KEY: str = ""
+    ASSEMBLY_IFRAME_KEY: str = ""  # Custom App iFrame token encryption key (separate from API key)
 
     BASE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:5173"

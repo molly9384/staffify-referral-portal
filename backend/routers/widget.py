@@ -56,10 +56,12 @@ def format_seconds(seconds: float) -> str:
 
 def get_company_id_from_token(token: str) -> str:
     """Decrypt Assembly token and return companyId."""
-    if not settings.ASSEMBLY_API_KEY:
+    # Use the iFrame-specific key if set, otherwise fall back to the main API key
+    iframe_key = settings.ASSEMBLY_IFRAME_KEY or settings.ASSEMBLY_API_KEY
+    if not iframe_key:
         raise HTTPException(status_code=503, detail="Assembly not configured")
     try:
-        payload = decrypt_assembly_token(settings.ASSEMBLY_API_KEY, token)
+        payload = decrypt_assembly_token(iframe_key, token)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
