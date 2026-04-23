@@ -79,7 +79,7 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
     company_id = payload.get("companyId")
     client_id = payload.get("clientId")
 
-    logger.info(f"Widget: companyId={company_id!r} clientId={client_id!r}")
+    print(f"[widget] companyId={company_id!r} clientId={client_id!r}", flush=True)
 
     if not company_id:
         raise HTTPException(status_code=400, detail="Token does not contain a companyId")
@@ -101,19 +101,19 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
             given = (client_data.get("givenName") or "").strip()
             family = (client_data.get("familyName") or "").strip()
             full = f"{given} {family}".strip()
-            logger.info(f"Widget: fast path clientId={client_id!r} → name={full!r}")
+            print(f"[widget] fast path name={full!r}", flush=True)
             if full:
                 assembly_name = full
         except Exception as e:
-            logger.warning(f"Widget: fast path failed for clientId={client_id!r}: {e}")
+            print(f"[widget] fast path error: {e}", flush=True)
 
     if not assembly_name:
         # Fallback: scan all Assembly clients for this companyId
         from services.assembly import get_all_assembly_clients
         try:
             all_clients = await get_all_assembly_clients(settings.ASSEMBLY_API_KEY)
-            company_ids_seen = {c.get("companyId") for c in all_clients}
-            logger.info(f"Widget: fallback scan — {len(all_clients)} clients, looking for companyId={company_id!r}, sample companyIds={list(company_ids_seen)[:5]}")
+            company_ids_seen = list({c.get("companyId") for c in all_clients})[:8]
+            print(f"[widget] fallback: {len(all_clients)} clients, looking for {company_id!r}, sample companyIds={company_ids_seen}", flush=True)
             for c in all_clients:
                 if c.get("companyId") == company_id:
                     given = (c.get("givenName") or "").strip()
@@ -123,9 +123,9 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
                         assembly_name = full
                         break
         except Exception as e:
-            logger.error(f"Widget: fallback Assembly lookup failed: {e}")
+            print(f"[widget] fallback error: {e}", flush=True)
 
-    logger.info(f"Widget: assembly_name={assembly_name!r}")
+    print(f"[widget] assembly_name={assembly_name!r}", flush=True)
 
     if not assembly_name:
         raise HTTPException(status_code=404, detail="No project found for this company")
@@ -134,7 +134,7 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
     from scheduler import HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES
     assembly_to_hubstaff = {v: k for k, v in HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES.items()}
     hubstaff_project_name = assembly_to_hubstaff.get(assembly_name, assembly_name)
-    logger.info(f"Widget: hubstaff_project_name={hubstaff_project_name!r}")
+    print(f"[widget] hubstaff_project_name={hubstaff_project_name!r}", flush=True)
 
     # 4. Find the Hubstaff project by name
     from services.hubstaff_service import HubstaffService
@@ -145,12 +145,12 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch Hubstaff projects: {e}")
 
-    project_names = [p.get("name", "") for p in projects]
-    logger.info(f"Widget: searching {len(projects)} Hubstaff projects for {hubstaff_project_name!r}, sample={project_names[:5]}")
+    project_names = [p.get("name", "") for p in projects][:8]
+    print(f"[widget] {len(projects)} Hubstaff projects, looking for {hubstaff_project_name!r}, sample={project_names}", flush=True)
 
     for p in projects:
         if p.get("name", "").strip().lower() == hubstaff_project_name.lower():
-            logger.info(f"Widget: matched project id={p['id']} name={p['name']!r}")
+            print(f"[widget] matched! id={p['id']} name={p['name']!r}", flush=True)
             return str(p["id"]), p["name"].strip()
 
     raise HTTPException(status_code=404, detail="No project found for this company")
