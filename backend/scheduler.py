@@ -89,6 +89,135 @@ async def job_apply_credits():
             logger.error(f"Credit application job failed: {e}", exc_info=True)
 
 
+# ---------------------------------------------------------------------------
+# VA Sync configuration
+# ---------------------------------------------------------------------------
+
+# Hubstaff project name → Assembly client full name (for non-matching names)
+HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES = {
+    "Flylisted": "Brianna Consoli",
+    "PRSPCTV Media - Kyle Lux": "Kyle Lux",
+}
+
+# Hubstaff project names to skip entirely (case-insensitive)
+SKIP_HUBSTAFF_PROJECTS = {"staffify", "patrick - hephaestus innovation"}
+
+# Assembly client full names to skip entirely (case-insensitive)
+SKIP_ASSEMBLY_CLIENTS = {"patrick szydlik"}
+
+
+async def job_sync_vas():
+    """Every 15 minutes — sync Hubstaff project VA assignments to Assembly company records."""
+    logger.info("Starting VA sync job...")
+    try:
+        from services.hubstaff_service import HubstaffService
+        from services.assembly import get_all_assembly_clients, update_company_vas
+        from config import settings
+
+        hubstaff = HubstaffService()
+        org_id = settings.HUBSTAFF_ORG_ID
+        api_key = settings.ASSEMBLY_API_KEY
+
+        if not api_key:
+            logger.warning("VA sync: ASSEMBLY_API_KEY not set — skipping.")
+            return
+
+        # ── Step 1: Load all Assembly clients ──────────────────────────────
+        assembly_clients = await get_all_assembly_clients(api_key)
+
+        # Build: full name → companyId (skip excluded clients and those without a company)
+        name_to_company_id: dict[str, str] = {}
+        all_company_ids: set[str] = set()
+
+        for c in assembly_clients:
+            given = (c.get("givenName") or "").strip()
+            family = (c.get("familyName") or "").strip()
+            full_name = f"{given} {family}".strip()
+            company_id = c.get("companyId")
+
+            if not full_name or not company_id:
+                continue
+            if full_name.lower() in SKIP_ASSEMBLY_CLIENTS:
+                continue
+
+            name_to_company_id[full_name] = company_id
+            all_company_ids.add(company_id)
+
+        logger.info(f"VA sync: loaded {len(name_to_company_id)} Assembly clients across {len(all_company_ids)} companies")
+
+        # ── Step 2: Process active Hubstaff projects ───────────────────────
+        projects = await hubstaff.get_projects(org_id)
+        active_projects = [
+            p for p in projects
+            if p.get("status") == "active"
+            and p.get("name", "").strip().lower() not in SKIP_HUBSTAFF_PROJECTS
+        ]
+
+        logger.info(f"VA sync: processing {len(active_projects)} active Hubstaff projects")
+
+        handled_company_ids: set[str] = set()
+
+        for project in active_projects:
+            project_name = project["name"].strip()
+            project_id = project["id"]
+
+            # Apply name override if this project name doesn't match Assembly directly
+            assembly_name = HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES.get(project_name, project_name)
+            company_id = name_to_company_id.get(assembly_name)
+
+            if not company_id:
+                logger.warning(
+                    f"VA sync: no Assembly match for Hubstaff project '{project_name}' "
+                    f"(looked up as '{assembly_name}') — skipping"
+                )
+                continue
+
+            # Get project members with role=user (excludes admins/viewers)
+            try:
+                members = await hubstaff.get_project_members(project_id)
+            except Exception as e:
+                logger.error(f"VA sync: failed to fetch members for '{project_name}': {e}")
+                continue
+
+            va_names = [
+                m["user"]["name"]
+                for m in members
+                if m.get("membership_role") == "user"
+                and m.get("user", {}).get("name")
+            ]
+
+            if va_names:
+                va_value = ", ".join(va_names)
+            else:
+                # Project exists but no VAs assigned
+                va_value = "*Sourcing Replacement*"
+
+            try:
+                await update_company_vas(api_key, company_id, va_value)
+                handled_company_ids.add(company_id)
+                logger.info(f"VA sync: '{project_name}' → '{va_value}'")
+            except Exception as e:
+                logger.error(f"VA sync: failed to update Assembly for '{project_name}': {e}")
+
+        # ── Step 3: Mark Assembly companies with no Hubstaff project ───────
+        unhandled_company_ids = all_company_ids - handled_company_ids
+        for company_id in unhandled_company_ids:
+            try:
+                await update_company_vas(api_key, company_id, "*New Client - Sourcing*")
+                logger.info(f"VA sync: company {company_id} has no Hubstaff project → '*New Client - Sourcing*'")
+            except Exception as e:
+                logger.error(f"VA sync: failed to update company {company_id}: {e}")
+
+        logger.info(
+            f"VA sync finished — "
+            f"updated: {len(handled_company_ids)}, "
+            f"new client sourcing: {len(unhandled_company_ids)}"
+        )
+
+    except Exception as e:
+        logger.error(f"VA sync job failed: {e}", exc_info=True)
+
+
 def start_scheduler():
     """Register all three credit jobs and start the scheduler."""
     from datetime import datetime
@@ -142,12 +271,23 @@ def start_scheduler():
         misfire_grace_time=3600,
     )
 
+    # Job 4: Sync VA names to Assembly — every 15 minutes
+    scheduler.add_job(
+        job_sync_vas,
+        trigger=CronTrigger(minute="*/15", timezone="America/New_York"),
+        id="job_sync_vas",
+        name="Every 15 min: Sync VA Names to Assembly",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
     scheduler.start()
     logger.info(
         "APScheduler started — "
         "Pull: every other Friday 7:00 AM ET | "
         "Verify: every Wednesday 5:30 PM ET | "
-        "Apply: every other Friday 2:30 PM ET"
+        "Apply: every other Friday 2:30 PM ET | "
+        "VA Sync: every 15 min"
     )
 
 
