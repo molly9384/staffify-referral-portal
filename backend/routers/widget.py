@@ -79,19 +79,36 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
     company_id = payload.get("companyId")
     client_id = payload.get("clientId")
 
-    print(f"[widget] companyId={company_id!r} clientId={client_id!r}", flush=True)
-
     if not company_id:
         raise HTTPException(status_code=400, detail="Token does not contain a companyId")
 
     if not settings.ASSEMBLY_API_KEY:
         raise HTTPException(status_code=503, detail="Assembly API not configured")
 
-    # 2. Resolve Assembly client name for this company
-    assembly_name: str | None = None
+    # 2. Load Hubstaff projects and build reverse name-override map up front
+    #    so we can check each Assembly client name against real projects.
+    from scheduler import HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES
+    from services.hubstaff_service import HubstaffService
+    hubstaff = HubstaffService()
+    org_id = settings.HUBSTAFF_ORG_ID
+    try:
+        projects = await hubstaff.get_projects(org_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch Hubstaff projects: {e}")
 
+    assembly_to_hubstaff = {v: k for k, v in HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES.items()}
+    project_lookup = {p["name"].strip().lower(): p for p in projects if p.get("name")}
+
+    def match_project(assembly_name: str):
+        """Return (project_id, project_name) if assembly_name maps to a Hubstaff project."""
+        hubstaff_name = assembly_to_hubstaff.get(assembly_name, assembly_name)
+        p = project_lookup.get(hubstaff_name.lower())
+        if p:
+            return str(p["id"]), p["name"].strip()
+        return None
+
+    # 3. Try fast path: logged-in client's own name
     if client_id:
-        # Fast path: single Assembly client lookup
         import asyncio
         from services.assembly import get_assembly_client
         try:
@@ -101,57 +118,33 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
             given = (client_data.get("givenName") or "").strip()
             family = (client_data.get("familyName") or "").strip()
             full = f"{given} {family}".strip()
-            print(f"[widget] fast path name={full!r}", flush=True)
             if full:
-                assembly_name = full
-        except Exception as e:
-            print(f"[widget] fast path error: {e}", flush=True)
+                result = match_project(full)
+                if result:
+                    return result
+                # Name didn't match a project — fall through to scan all company members
+        except Exception:
+            pass
 
-    if not assembly_name:
-        # Fallback: scan all Assembly clients for this companyId
-        from services.assembly import get_all_assembly_clients
-        try:
-            all_clients = await get_all_assembly_clients(settings.ASSEMBLY_API_KEY)
-            company_ids_seen = list({c.get("companyId") for c in all_clients})[:8]
-            print(f"[widget] fallback: {len(all_clients)} clients, looking for {company_id!r}, sample companyIds={company_ids_seen}", flush=True)
-            for c in all_clients:
-                if c.get("companyId") == company_id:
-                    given = (c.get("givenName") or "").strip()
-                    family = (c.get("familyName") or "").strip()
-                    full = f"{given} {family}".strip()
-                    if full:
-                        assembly_name = full
-                        break
-        except Exception as e:
-            print(f"[widget] fallback error: {e}", flush=True)
-
-    print(f"[widget] assembly_name={assembly_name!r}", flush=True)
-
-    if not assembly_name:
-        raise HTTPException(status_code=404, detail="No project found for this company")
-
-    # 3. Reverse-map Assembly client name → Hubstaff project name
-    from scheduler import HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES
-    assembly_to_hubstaff = {v: k for k, v in HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES.items()}
-    hubstaff_project_name = assembly_to_hubstaff.get(assembly_name, assembly_name)
-    print(f"[widget] hubstaff_project_name={hubstaff_project_name!r}", flush=True)
-
-    # 4. Find the Hubstaff project by name
-    from services.hubstaff_service import HubstaffService
-    hubstaff = HubstaffService()
-    org_id = settings.HUBSTAFF_ORG_ID
+    # 4. Scan ALL Assembly clients associated with this companyId and try each name.
+    #    This handles: internal users viewing a company, test accounts, multiple
+    #    people per company — we find whichever member maps to a Hubstaff project.
+    from services.assembly import get_all_assembly_clients
     try:
-        projects = await hubstaff.get_projects(org_id)
+        all_clients = await get_all_assembly_clients(settings.ASSEMBLY_API_KEY)
+        for c in all_clients:
+            if c.get("companyId") != company_id:
+                continue
+            given = (c.get("givenName") or "").strip()
+            family = (c.get("familyName") or "").strip()
+            full = f"{given} {family}".strip()
+            if not full:
+                continue
+            result = match_project(full)
+            if result:
+                return result
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch Hubstaff projects: {e}")
-
-    project_names = [p.get("name", "") for p in projects][:8]
-    print(f"[widget] {len(projects)} Hubstaff projects, looking for {hubstaff_project_name!r}, sample={project_names}", flush=True)
-
-    for p in projects:
-        if p.get("name", "").strip().lower() == hubstaff_project_name.lower():
-            print(f"[widget] matched! id={p['id']} name={p['name']!r}", flush=True)
-            return str(p["id"]), p["name"].strip()
+        raise HTTPException(status_code=502, detail=f"Failed to fetch Assembly clients: {e}")
 
     raise HTTPException(status_code=404, detail="No project found for this company")
 
