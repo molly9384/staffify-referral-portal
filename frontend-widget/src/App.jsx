@@ -93,7 +93,9 @@ export default function App() {
     setError('')
     setNoProject(false)
     try {
-      const res = await fetch(`${API_BASE}/api/widget/hours?token=${encodeURIComponent(token)}`)
+      // Pass the client's local date so the UTC server uses the viewer's actual day
+      const localDate = new Date().toLocaleDateString('en-CA') // → "YYYY-MM-DD"
+      const res = await fetch(`${API_BASE}/api/widget/hours?token=${encodeURIComponent(token)}&local_date=${localDate}`)
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         if (res.status === 404) {

@@ -153,10 +153,13 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 @router.get("/hours")
-async def get_hours(token: str = Query(...)):
+async def get_hours(token: str = Query(...), local_date: str = Query(None)):
     """
     Return VA hours for today, this week, and the current billing period.
     Authenticated via Assembly iFrame token.
+
+    local_date (YYYY-MM-DD): the viewer's local calendar date, passed by the
+    frontend to avoid UTC-vs-local-timezone drift on the server.
     """
     project_id, project_name = await get_hubstaff_project_for_token(token)
 
@@ -164,7 +167,15 @@ async def get_hours(token: str = Query(...)):
     hubstaff = HubstaffService()
     org_id = settings.HUBSTAFF_ORG_ID
 
-    today = date.today()
+    # Use the client's local date when provided so a UTC server doesn't show
+    # tomorrow's (empty) data to users in earlier time zones.
+    if local_date:
+        try:
+            today = date.fromisoformat(local_date)
+        except ValueError:
+            today = date.today()
+    else:
+        today = date.today()
     week_start = get_week_start(today)
     period_start, period_end = get_billing_period(today)
 
