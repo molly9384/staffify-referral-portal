@@ -79,7 +79,7 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
     client_id = payload.get("clientId")
 
     if not company_id:
-        raise HTTPException(status_code=400, detail="Token does not contain a companyId")
+        raise HTTPException(status_code=404, detail="No project found for this company")
 
     if not settings.ASSEMBLY_API_KEY:
         raise HTTPException(status_code=503, detail="Assembly API not configured")
