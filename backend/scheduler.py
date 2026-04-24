@@ -289,13 +289,12 @@ def start_scheduler():
         misfire_grace_time=3600,
     )
 
-    # Job 4: Sync VA names to Assembly — every 30 minutes
-    # (reduced from 15 min to ease Assembly API rate limits)
+    # Job 4: Sync VA names to Assembly — every hour
     scheduler.add_job(
         job_sync_vas,
-        trigger=CronTrigger(minute="*/30", timezone="America/New_York"),
+        trigger=CronTrigger(minute=0, timezone="America/New_York"),
         id="job_sync_vas",
-        name="Every 30 min: Sync VA Names to Assembly",
+        name="Hourly: Sync VA Names to Assembly",
         replace_existing=True,
         misfire_grace_time=300,
     )

@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 _clients_cache: list | None = None
 _clients_cache_time: float = 0.0
-_CLIENTS_CACHE_TTL: float = 900.0   # 15 minutes — matches VA sync interval
+_CLIENTS_CACHE_TTL: float = 3600.0  # 1 hour — matches VA sync interval
 _clients_lock: asyncio.Lock | None = None  # lazy-init: must be created inside a running loop
 
 
