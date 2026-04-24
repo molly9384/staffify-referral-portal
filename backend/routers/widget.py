@@ -225,7 +225,7 @@ async def get_hours(token: str = Query(...)):
         "client_name": project_name,
         "today": build_block(
             today_totals,
-            today.strftime("Today — %A, %B %-d"),
+            today.strftime("Today (%A, %B %-d)"),
         ),
         "this_week": build_block(
             week_totals,

@@ -21,8 +21,8 @@ const AVATAR_PALETTE = [
 // Card accent styles — each period gets its own distinct color
 const ACCENT_STYLES = {
   today:  { bar: 'bg-primary-600',  text: 'text-primary-700'  },
-  week:   { bar: 'bg-emerald-600',  text: 'text-emerald-700'  },
-  period: { bar: 'bg-violet-600',   text: 'text-violet-700'   },
+  week:   { bar: 'bg-green-500',    text: 'text-green-700'    },
+  period: { bar: 'bg-purple-400',   text: 'text-purple-700'   },
 }
 
 // ── Individual hours card ─────────────────────────────────────────────────────
@@ -30,13 +30,22 @@ function HoursCard({ block, accent, vaColorMap }) {
   const hasVAs = block.by_va && block.by_va.length > 0
   const s = ACCENT_STYLES[accent] || ACCENT_STYLES.today
 
+  // Split "Today (Thursday, April 23)" → title: "TODAY", sub: "(Thursday, April 23)"
+  // Split "This Week (Mon Apr 20 – today)" → title: "THIS WEEK", sub: "(Mon Apr 20 – today)"
+  const parenIdx = block.label.indexOf(' (')
+  const headerTitle = (parenIdx >= 0 ? block.label.slice(0, parenIdx) : block.label).toUpperCase()
+  const headerSub   = parenIdx >= 0 ? block.label.slice(parenIdx + 1) : ''
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       {/* Colored top bar */}
       <div className={`${s.bar} px-5 py-4`}>
-        <p className="text-white/80 text-xs font-semibold uppercase tracking-widest mb-1">
-          {block.label}
-        </p>
+        <div className="flex items-baseline gap-2 mb-1">
+          <span className="text-white text-xs font-bold uppercase tracking-widest">{headerTitle}</span>
+          {headerSub && (
+            <span className="text-white/65 text-xs font-medium tracking-normal normal-case">{headerSub}</span>
+          )}
+        </div>
         <p className="text-white text-3xl font-bold leading-none">
           {block.total_formatted}
         </p>
@@ -150,8 +159,8 @@ export default function App() {
           <>
             {[
               'bg-primary-200',
-              'bg-emerald-200',
-              'bg-violet-200',
+              'bg-green-200',
+              'bg-purple-200',
             ].map((color, i) => (
               <div key={i} className="rounded-2xl overflow-hidden shadow-sm">
                 <div className={`h-20 ${color} animate-pulse`} />
