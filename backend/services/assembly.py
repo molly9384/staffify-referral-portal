@@ -17,12 +17,37 @@ import hmac as hmac_module
 import hashlib
 import json
 import logging
+import time
 import httpx
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# In-process cache for Assembly clients list
+# ---------------------------------------------------------------------------
+# Assembly rate-limits GET /clients aggressively.  Multiple concurrent callers
+# (VA sync job + multiple widget requests) were each making independent calls
+# and collectively blowing past the limit.
+#
+# Solution: a single shared cache (TTL = 15 min) + an asyncio lock so only ONE
+# coroutine ever calls Assembly at a time.  All others wait then read the cache.
+# ---------------------------------------------------------------------------
+
+_clients_cache: list | None = None
+_clients_cache_time: float = 0.0
+_CLIENTS_CACHE_TTL: float = 900.0   # 15 minutes — matches VA sync interval
+_clients_lock: asyncio.Lock | None = None  # lazy-init: must be created inside a running loop
+
+
+def _get_clients_lock() -> asyncio.Lock:
+    """Return the module-level asyncio.Lock, creating it on first use."""
+    global _clients_lock
+    if _clients_lock is None:
+        _clients_lock = asyncio.Lock()
+    return _clients_lock
 
 ASSEMBLY_API_BASE = "https://api.assembly.com/v1"
 
@@ -104,51 +129,73 @@ ASSEMBLY_VA_FIELD_KEY = "currentVas"
 
 async def get_all_assembly_clients(api_key: str, max_retries: int = 3) -> list:
     """
-    Fetch all Assembly clients (paginated).
-    Returns a list of dicts with: id, givenName, familyName, companyId, etc.
+    Fetch all Assembly clients (paginated), with a 15-minute in-process cache.
 
-    Retries up to max_retries times on 429 Too Many Requests, with exponential
-    backoff (5s, 10s, 20s) so the VA sync job survives brief rate-limit windows.
+    Only one coroutine calls Assembly at a time (asyncio.Lock).  All concurrent
+    callers wait for that single fetch to complete, then share the cached result.
+    This prevents the pile-on of parallel 429 errors that occurred when the VA
+    sync job and multiple widget requests each made independent calls.
+
+    Retries up to max_retries times on 429 with exponential backoff (5s/10s/20s).
     """
-    all_clients = []
-    url = f"{ASSEMBLY_API_BASE}/clients"
-    params: dict = {"limit": 500}
+    global _clients_cache, _clients_cache_time
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        while url:
-            last_exc = None
-            for attempt in range(max_retries):
-                response = await client.get(
-                    url,
-                    headers={"X-API-KEY": api_key},
-                    params=params,
-                )
-                if response.status_code == 429:
-                    wait = 5 * (2 ** attempt)  # 5s, 10s, 20s
-                    logger.warning(
-                        f"Assembly GET /clients returned 429 — "
-                        f"retrying in {wait}s (attempt {attempt + 1}/{max_retries})"
-                    )
-                    await asyncio.sleep(wait)
-                    last_exc = httpx.HTTPStatusError(
-                        f"429 Too Many Requests", request=response.request, response=response
-                    )
-                    continue
-                response.raise_for_status()
+    # Fast path: return cached result without touching the lock
+    if _clients_cache is not None and (time.monotonic() - _clients_cache_time) < _CLIENTS_CACHE_TTL:
+        return _clients_cache
+
+    # Serialize: only one coroutine fetches at a time
+    async with _get_clients_lock():
+        # Re-check after acquiring lock — another coroutine may have refreshed the cache
+        # while we were waiting
+        if _clients_cache is not None and (time.monotonic() - _clients_cache_time) < _CLIENTS_CACHE_TTL:
+            return _clients_cache
+
+        logger.info("Assembly clients cache miss — fetching from API")
+        all_clients: list = []
+        url: str | None = f"{ASSEMBLY_API_BASE}/clients"
+        params: dict = {"limit": 500}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while url:
                 last_exc = None
-                break
-            else:
-                raise last_exc
+                for attempt in range(max_retries):
+                    response = await client.get(
+                        url,
+                        headers={"X-API-KEY": api_key},
+                        params=params,
+                    )
+                    if response.status_code == 429:
+                        wait = 5 * (2 ** attempt)  # 5s → 10s → 20s
+                        logger.warning(
+                            f"Assembly GET /clients returned 429 — "
+                            f"retrying in {wait}s (attempt {attempt + 1}/{max_retries})"
+                        )
+                        await asyncio.sleep(wait)
+                        last_exc = httpx.HTTPStatusError(
+                            "429 Too Many Requests",
+                            request=response.request,
+                            response=response,
+                        )
+                        continue
+                    response.raise_for_status()
+                    last_exc = None
+                    break
+                else:
+                    raise last_exc  # type: ignore[misc]
 
-            data = response.json()
-            all_clients.extend(data.get("data", []))
-            cursor = data.get("nextCursor") or data.get("pageInfo", {}).get("cursor")
-            if cursor:
-                params = {"limit": 500, "cursor": cursor}
-            else:
-                url = None
+                data = response.json()
+                all_clients.extend(data.get("data", []))
+                cursor = data.get("nextCursor") or data.get("pageInfo", {}).get("cursor")
+                if cursor:
+                    params = {"limit": 500, "cursor": cursor}
+                else:
+                    url = None
 
-    return all_clients
+        _clients_cache = all_clients
+        _clients_cache_time = time.monotonic()
+        logger.info(f"Assembly clients cache populated — {len(all_clients)} clients")
+        return all_clients
 
 
 async def update_company_vas(api_key: str, company_id: str, va_value: str) -> dict:

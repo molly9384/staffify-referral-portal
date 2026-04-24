@@ -130,9 +130,9 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
         return None
 
     # Step B1: single cheap call using clientId from the token
+    import asyncio
+    from services.assembly import get_assembly_client
     if client_id:
-        import asyncio
-        from services.assembly import get_assembly_client
         try:
             client_data = await asyncio.to_thread(
                 get_assembly_client, settings.ASSEMBLY_API_KEY, client_id
@@ -143,6 +143,7 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
             if full:
                 result = match_project(full)
                 if result:
+                    await _write_back_company_id(company_id, result[0])
                     return result
         except Exception:
             pass
@@ -161,11 +162,34 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
                 continue
             result = match_project(full)
             if result:
+                await _write_back_company_id(company_id, result[0])
                 return result
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch Assembly clients: {e}")
 
     raise HTTPException(status_code=404, detail="No project found for this company")
+
+
+async def _write_back_company_id(company_id: str, project_id: str) -> None:
+    """
+    When the widget resolves a project via name-matching fallback, write
+    assembly_company_id back to the Client row so future requests hit the
+    fast DB path instead of calling Assembly again.
+    """
+    try:
+        from database import AsyncSessionLocal
+        from models import Client
+        from sqlalchemy import update as sa_update
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                sa_update(Client)
+                .where(Client.hubstaff_project_id == str(project_id))
+                .values(assembly_company_id=company_id)
+            )
+            await db.commit()
+        logger.info(f"Widget write-back: project {project_id} → company {company_id}")
+    except Exception as e:
+        logger.warning(f"Widget write-back failed (non-fatal): {e}")
 
 
 # ---------------------------------------------------------------------------
