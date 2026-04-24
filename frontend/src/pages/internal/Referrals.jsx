@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getReferrals, getClients, createReferral, archiveReferral, restoreReferral, deleteReferral } from '../../api/client'
+import { getReferrals, getClients, createReferral, updateReferral, archiveReferral, restoreReferral, deleteReferral } from '../../api/client'
 import { statusBadge, formatDate, formatCurrency } from '../../utils/format'
 import { getSeenReferralIds, markReferralsAsSeen } from '../../utils/storage'
 import { useAuth } from '../../context/AuthContext'
@@ -35,6 +35,10 @@ export default function Referrals() {
   const [actionLoading, setActionLoading] = useState(null)
   const [error, setError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [editReferral, setEditReferral] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [editError, setEditError] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -104,6 +108,41 @@ export default function Referrals() {
       setError(err?.response?.data?.detail || 'Failed to delete referral.')
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  const handleEditOpen = (ref) => {
+    setEditReferral(ref)
+    setEditForm({
+      referred_name: ref.referred_name || '',
+      referred_company: ref.referred_company || '',
+      referred_email: ref.referred_email || '',
+      referred_phone: ref.referred_phone || '',
+      referred_website: ref.referred_website || '',
+      referral_date: ref.referral_date || '',
+    })
+    setEditError('')
+  }
+
+  const handleEditSave = async (e) => {
+    e.preventDefault()
+    setEditSubmitting(true)
+    setEditError('')
+    try {
+      await updateReferral(editReferral.id, {
+        referred_name: editForm.referred_name || undefined,
+        referred_company: editForm.referred_company || null,
+        referred_email: editForm.referred_email || null,
+        referred_phone: editForm.referred_phone || null,
+        referred_website: editForm.referred_website || null,
+        referral_date: editForm.referral_date || undefined,
+      })
+      setEditReferral(null)
+      load()
+    } catch (err) {
+      setEditError(err?.response?.data?.detail || 'Failed to save changes.')
+    } finally {
+      setEditSubmitting(false)
     }
   }
 
@@ -242,6 +281,12 @@ export default function Referrals() {
                               <Link to={`/internal/referrals/${ref.id}`} className="text-primary-600 hover:text-primary-700 font-medium">
                                 View
                               </Link>
+                              <button
+                                onClick={() => handleEditOpen(ref)}
+                                className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+                              >
+                                Edit
+                              </button>
                               {isOwner && (
                                 <button
                                   onClick={() => handleArchive(ref.id)}
@@ -280,6 +325,93 @@ export default function Referrals() {
                 {actionLoading === deleteConfirm ? 'Deleting…' : 'Delete'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Referral Modal */}
+      {editReferral && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">Edit Referral</h2>
+              <button onClick={() => setEditReferral(null)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleEditSave} className="p-6 space-y-4">
+              <div>
+                <label className="label">Referred Name</label>
+                <input
+                  type="text"
+                  className="input"
+                  required
+                  value={editForm.referred_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referred_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Company (optional)</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g. Acme Corp"
+                  value={editForm.referred_company}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referred_company: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Email (optional)</label>
+                <input
+                  type="email"
+                  className="input"
+                  placeholder="contact@example.com"
+                  value={editForm.referred_email}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referred_email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Phone (optional)</label>
+                <input
+                  type="tel"
+                  className="input"
+                  placeholder="+1 (555) 000-0000"
+                  value={editForm.referred_phone}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referred_phone: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Website (optional)</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="https://example.com"
+                  value={editForm.referred_website}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referred_website: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Referral Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  required
+                  value={editForm.referral_date}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referral_date: e.target.value }))}
+                />
+              </div>
+              {editError && <p className="text-sm text-red-600">{editError}</p>}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setEditReferral(null)} className="btn-secondary flex-1 justify-center">
+                  Cancel
+                </button>
+                <button type="submit" disabled={editSubmitting} className="btn-primary flex-1 justify-center">
+                  {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
