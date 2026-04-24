@@ -177,10 +177,12 @@ async def get_all_assembly_clients(api_key: str, max_retries: int = 3) -> list:
                         params=params,
                     )
                     if response.status_code == 429:
+                        retry_after = response.headers.get("Retry-After") or response.headers.get("X-RateLimit-Reset")
                         wait = 5 * (2 ** attempt)  # 5s → 10s → 20s
                         logger.warning(
                             f"Assembly GET /clients returned 429 — "
                             f"retrying in {wait}s (attempt {attempt + 1}/{max_retries})"
+                            + (f" | Retry-After: {retry_after}" if retry_after else " | No Retry-After header")
                         )
                         await asyncio.sleep(wait)
                         last_exc = httpx.HTTPStatusError(
