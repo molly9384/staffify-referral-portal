@@ -258,6 +258,11 @@ export default function App() {
                 Updated at {formattedTime} · refreshes every 15 min
               </p>
             )}
+
+            {/* Disclaimer */}
+            <p className="text-center text-xs text-gray-400 italic px-2 pt-1 pb-2 leading-relaxed">
+              *Hours shown are based on Hubstaff time tracking and may be adjusted if a VA needs to correct a missed start/stop. For the most up-to-date data, check Hubstaff directly. Hour corrections must be submitted by Thursday at 7PM EST prior to billing.
+            </p>
           </>
         )}
       </div>
