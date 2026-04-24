@@ -2,7 +2,7 @@
 APScheduler jobs for credit automation.
 
 Three separate jobs:
-  1. Friday 7:00 AM ET  (bi-weekly) — pull new credits from Hubstaff invoices
+  1. Friday 10:00 AM ET (bi-weekly) — pull new credits from Hubstaff invoices
   2. Wednesday 5:30 PM ET (weekly)  — verify pending credits, promote closed invoices to eligible
   3. Friday 2:30 PM ET  (bi-weekly) — apply eligible credits to QBO invoices
 """
@@ -20,7 +20,7 @@ scheduler = AsyncIOScheduler()
 
 
 async def job_pull_credits():
-    """Friday 7:00 AM ET (bi-weekly) — expire old referrals + pull new pending credits from Hubstaff."""
+    """Friday 10:00 AM ET (bi-weekly) — expire old referrals + pull new pending credits from Hubstaff."""
     logger.info("Starting bi-weekly credit pull job...")
     async with AsyncSessionLocal() as db:
         try:
@@ -240,15 +240,15 @@ def start_scheduler():
     """Register all three credit jobs and start the scheduler."""
     from datetime import datetime
 
-    # Job 1: Pull credits — every other Friday at 7:00 AM ET
+    # Job 1: Pull credits — every other Friday at 10:00 AM ET
     scheduler.add_job(
         job_pull_credits,
         trigger=CronTrigger(
             day_of_week="fri",
-            hour=7,
+            hour=10,
             minute=0,
             week="*/2",
-            start_date=datetime(2026, 4, 11, 7, 0, 0),
+            start_date=datetime(2026, 4, 11, 10, 0, 0),
             timezone="America/New_York",
         ),
         id="job_pull_credits",
@@ -302,7 +302,7 @@ def start_scheduler():
     scheduler.start()
     logger.info(
         "APScheduler started — "
-        "Pull: every other Friday 7:00 AM ET | "
+        "Pull: every other Friday 10:00 AM ET | "
         "Verify: every Wednesday 5:30 PM ET | "
         "Apply: every other Friday 2:30 PM ET | "
         "VA Sync: every 15 min"

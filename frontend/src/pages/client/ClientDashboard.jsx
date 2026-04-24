@@ -75,8 +75,8 @@ export default function ClientDashboard() {
           }
         />
         <StatCard
-          label="Credits Earned"
-          value={summary ? formatCurrency(summary.total_earned) : null}
+          label="Credits Applied"
+          value={summary ? formatCurrency(summary.total_applied) : null}
           loading={loading}
           color="green"
           icon={
