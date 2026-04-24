@@ -49,6 +49,17 @@ def _get_clients_lock() -> asyncio.Lock:
         _clients_lock = asyncio.Lock()
     return _clients_lock
 
+
+def get_cached_assembly_clients() -> list | None:
+    """
+    Return the cached Assembly clients list if it has ever been populated,
+    regardless of whether the cache is fresh or stale.  Returns None only
+    if get_all_assembly_clients has never completed successfully.
+
+    Safe to call from the widget — never triggers an API call.
+    """
+    return _clients_cache
+
 ASSEMBLY_API_BASE = "https://api.assembly.com/v1"
 
 

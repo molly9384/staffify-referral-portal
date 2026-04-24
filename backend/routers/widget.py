@@ -130,11 +130,6 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
         return None
 
     # Step B1: single cheap call using clientId from the token
-    # NOTE: We intentionally do NOT fall back to a full GET /clients scan here.
-    # That bulk endpoint is rate-limited by Assembly and calling it on every
-    # widget request caused persistent 429 errors.  The VA sync job populates
-    # the DB mapping (Step A) via the bulk scan on its own schedule — once that
-    # mapping exists all future widget requests use the fast DB path.
     import asyncio
     from services.assembly import get_assembly_client
     if client_id:
@@ -153,9 +148,32 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
         except Exception:
             pass
 
-    # No match found — return 404 so the frontend shows the friendly empty state.
-    # (The VA sync job will populate the DB mapping on its next successful run,
-    # after which the DB fast path in Step A will resolve this company.)
+    # Step B2: search the in-memory cache for ANY member of this company.
+    # This handles team members, internal users, and test accounts whose own
+    # name doesn't match a Hubstaff project — as long as someone else in the
+    # same Assembly company does (e.g. the primary client contact "Jane Doe").
+    #
+    # IMPORTANT: this reads the cache only — it NEVER triggers a fresh API call.
+    # The VA sync job is the sole owner of the bulk GET /clients fetch.
+    from services.assembly import get_cached_assembly_clients
+    cached = get_cached_assembly_clients()
+    if cached is not None:
+        for c in cached:
+            if c.get("companyId") != company_id:
+                continue
+            given = (c.get("givenName") or "").strip()
+            family = (c.get("familyName") or "").strip()
+            full = f"{given} {family}".strip()
+            if not full:
+                continue
+            result = match_project(full)
+            if result:
+                await _write_back_company_id(company_id, result[0])
+                return result
+
+    # No match found — return 404 → frontend shows the friendly empty state.
+    # Once the hourly VA sync runs successfully it will populate both the cache
+    # and the DB, after which Step A resolves instantly for everyone.
     raise HTTPException(status_code=404, detail="No project found for this company")
 
 
