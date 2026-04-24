@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
+const REFRESH_INTERVAL_MS = 15 * 60 * 1000 // 15 minutes
 
 function getToken() {
   return new URLSearchParams(window.location.search).get('token') || ''
@@ -52,6 +53,12 @@ function HoursCard({ block, accent, vaColorMap }) {
         {block.total_seconds === 0 && (
           <p className="text-white/60 text-xs mt-1">No hours tracked yet</p>
         )}
+        {/* Daily average — only present on billing period block */}
+        {block.daily_avg_formatted && (
+          <p className="text-white/70 text-xs mt-1.5">
+            avg {block.daily_avg_formatted}/day this period
+          </p>
+        )}
       </div>
 
       {/* VA breakdown — always visible */}
@@ -86,10 +93,11 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [noProject, setNoProject] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!token) return
-    setLoading(true)
+    if (!silent) setLoading(true)
     setError('')
     setNoProject(false)
     try {
@@ -106,6 +114,7 @@ export default function App() {
         throw new Error(body.detail || `Error ${res.status}`)
       }
       setData(await res.json())
+      setLastUpdated(new Date())
     } catch (e) {
       setError(e.message || 'Failed to load hours.')
     } finally {
@@ -113,7 +122,14 @@ export default function App() {
     }
   }, [token])
 
+  // Initial load
   useEffect(() => { load() }, [load])
+
+  // Auto-refresh every 15 minutes (silent — no loading spinner)
+  useEffect(() => {
+    const interval = setInterval(() => load(true), REFRESH_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [load])
 
   // Build a stable VA → avatar-color map from all unique names across all three cards
   const vaColorMap = (() => {
@@ -126,6 +142,10 @@ export default function App() {
     const unique = [...new Set(names)].sort()
     return Object.fromEntries(unique.map((name, i) => [name, AVATAR_PALETTE[i % AVATAR_PALETTE.length]]))
   })()
+
+  const formattedTime = lastUpdated
+    ? lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : null
 
   if (!token) {
     return (
@@ -180,7 +200,7 @@ export default function App() {
           <div className="rounded-2xl bg-red-50 border border-red-100 px-5 py-4">
             <p className="text-sm text-red-600 font-medium">{error}</p>
             <button
-              onClick={load}
+              onClick={() => load()}
               className="mt-2 text-xs font-semibold text-red-500 hover:text-red-700 underline underline-offset-2"
             >
               Try again
@@ -220,6 +240,13 @@ export default function App() {
             <HoursCard block={data.today}          accent="today"  vaColorMap={vaColorMap} />
             <HoursCard block={data.this_week}       accent="week"   vaColorMap={vaColorMap} />
             <HoursCard block={data.billing_period}  accent="period" vaColorMap={vaColorMap} />
+
+            {/* Last updated timestamp */}
+            {formattedTime && (
+              <p className="text-right text-xs text-gray-400 px-1 pt-0.5">
+                Updated at {formattedTime} · refreshes every 15 min
+              </p>
+            )}
           </>
         )}
       </div>

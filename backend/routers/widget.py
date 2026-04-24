@@ -232,6 +232,19 @@ async def get_hours(token: str = Query(...), local_date: str = Query(None)):
     week_totals = aggregate(week_start, today)
     period_totals = aggregate(period_start, today)
 
+    # Build billing period block and add daily average
+    billing_block = build_block(
+        period_totals,
+        f"Billing Period  ({period_start.strftime('%b %-d')} – {period_end.strftime('%b %-d, %Y')})",
+    )
+    days_elapsed = max((today - period_start).days + 1, 1)
+    if billing_block["total_seconds"] > 0:
+        billing_block["daily_avg_formatted"] = format_seconds(
+            billing_block["total_seconds"] / days_elapsed
+        )
+    else:
+        billing_block["daily_avg_formatted"] = None
+
     return {
         "client_name": project_name,
         "today": build_block(
@@ -242,10 +255,7 @@ async def get_hours(token: str = Query(...), local_date: str = Query(None)):
             week_totals,
             f"This Week  (Mon {week_start.strftime('%b %-d')} – today)",
         ),
-        "billing_period": build_block(
-            period_totals,
-            f"Billing Period  ({period_start.strftime('%b %-d')} – {period_end.strftime('%b %-d, %Y')})",
-        ),
+        "billing_period": billing_block,
     }
 
 
