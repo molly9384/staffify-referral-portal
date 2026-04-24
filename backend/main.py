@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config import settings
 from database import engine, Base
@@ -143,6 +144,34 @@ app.include_router(qbo.router, prefix="/api/qbo", tags=["QuickBooks Online"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(widget.router, prefix="/api/widget", tags=["Widget"])
+
+
+ALLOWED_ORIGINS = [
+    settings.FRONTEND_URL,
+    "https://referral.gostaffify.com",
+    "https://staffify-referral-frontend.onrender.com",
+    "https://staffify-assembly-widget.onrender.com",
+    "https://app.assembly.com",
+]
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """
+    Catch-all for any unhandled exception.  FastAPI's default 500 handler
+    runs *before* the CORS middleware adds headers, so Safari blocks the
+    response and shows 'Load failed'.  This handler echoes the request's
+    Origin back so CORS is always present on error responses.
+    """
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if any(origin == o for o in ALLOWED_ORIGINS) or origin.endswith(".assembly.com"):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected error occurred. Please try again."},
+        headers=headers,
+    )
 
 
 @app.get("/health")
