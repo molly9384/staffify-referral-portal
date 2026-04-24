@@ -242,7 +242,7 @@ export default function App() {
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-gray-900">Your VA hours will appear here</h2>
               <p className="text-sm text-gray-500 max-w-xs leading-relaxed">
-                Once you've made your first hire, you'll be able to track your VA's hours right here in real time.
+                If you have an active VA, your hours will show up here automatically. This page refreshes hourly — check back shortly.
               </p>
             </div>
             <a
