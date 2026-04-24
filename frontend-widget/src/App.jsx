@@ -21,7 +21,7 @@ const AVATAR_PALETTE = [
 // Card accent styles — each period gets its own distinct color
 const ACCENT_STYLES = {
   today:  { bar: 'bg-primary-600',  text: 'text-primary-700'  },
-  week:   { bar: 'bg-green-500',    text: 'text-green-700'    },
+  week:   { bar: 'bg-teal-500',     text: 'text-teal-700'     },
   period: { bar: 'bg-purple-400',   text: 'text-purple-700'   },
 }
 
@@ -159,7 +159,7 @@ export default function App() {
           <>
             {[
               'bg-primary-200',
-              'bg-green-200',
+              'bg-teal-200',
               'bg-purple-200',
             ].map((color, i) => (
               <div key={i} className="rounded-2xl overflow-hidden shadow-sm">
