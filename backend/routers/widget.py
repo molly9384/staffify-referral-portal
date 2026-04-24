@@ -60,11 +60,10 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
     Decrypt Assembly iFrame token and resolve to the matching Hubstaff project.
     Returns (project_id, project_name).
 
-    Uses the same name-matching logic as the VA sync job:
-      Assembly client name ──(reverse overrides)──► Hubstaff project name
-
-    Fast path: uses clientId from the token to call GET /clients/{id} (1 API call).
-    Fallback: scans all Assembly clients for the matching companyId.
+    Resolution order (fastest → most expensive):
+      1. DB lookup by assembly_company_id (populated by VA sync job — zero API calls)
+      2. Single Assembly API call using clientId from token
+      3. Full Assembly client scan (last resort — expensive, may trigger rate limits)
     """
     # 1. Decrypt token
     iframe_key = settings.ASSEMBLY_IFRAME_KEY or settings.ASSEMBLY_API_KEY
@@ -84,29 +83,53 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
     if not settings.ASSEMBLY_API_KEY:
         raise HTTPException(status_code=503, detail="Assembly API not configured")
 
-    # 2. Load Hubstaff projects and build reverse name-override map up front
-    #    so we can check each Assembly client name against real projects.
-    from scheduler import HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES
+    # ── Fetch Hubstaff projects once (used by both DB and name-match paths) ──
+    from database import AsyncSessionLocal
+    from models import Client
+    from sqlalchemy import select as sa_select
     from services.hubstaff_service import HubstaffService
+    from scheduler import HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES
+
     hubstaff = HubstaffService()
     org_id = settings.HUBSTAFF_ORG_ID
+
     try:
         projects = await hubstaff.get_projects(org_id)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch Hubstaff projects: {e}")
 
+    # ── Step A: DB fast path ────────────────────────────────────────────────
+    # The VA sync job writes assembly_company_id → hubstaff_project_id on every
+    # run.  Use that mapping directly so we never need to call Assembly's
+    # /clients endpoint on a widget request.
+    async with AsyncSessionLocal() as db:
+        db_result = await db.execute(
+            sa_select(Client).where(Client.assembly_company_id == company_id)
+        )
+        client_record = db_result.scalar_one_or_none()
+
+    if client_record and client_record.hubstaff_project_id:
+        project = next(
+            (p for p in projects if str(p.get("id")) == str(client_record.hubstaff_project_id)),
+            None,
+        )
+        if project:
+            logger.debug(f"Widget DB hit: company {company_id} → project '{project['name']}'")
+            return str(project["id"]), project["name"].strip()
+
+    # ── Step B: Name-based matching (for new clients not yet in DB) ─────────
+
     assembly_to_hubstaff = {v: k for k, v in HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES.items()}
     project_lookup = {p["name"].strip().lower(): p for p in projects if p.get("name")}
 
     def match_project(assembly_name: str):
-        """Return (project_id, project_name) if assembly_name maps to a Hubstaff project."""
         hubstaff_name = assembly_to_hubstaff.get(assembly_name, assembly_name)
         p = project_lookup.get(hubstaff_name.lower())
         if p:
             return str(p["id"]), p["name"].strip()
         return None
 
-    # 3. Try fast path: logged-in client's own name
+    # Step B1: single cheap call using clientId from the token
     if client_id:
         import asyncio
         from services.assembly import get_assembly_client
@@ -121,13 +144,10 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
                 result = match_project(full)
                 if result:
                     return result
-                # Name didn't match a project — fall through to scan all company members
         except Exception:
             pass
 
-    # 4. Scan ALL Assembly clients associated with this companyId and try each name.
-    #    This handles: internal users viewing a company, test accounts, multiple
-    #    people per company — we find whichever member maps to a Hubstaff project.
+    # Step B2: full client scan — last resort, avoid if possible
     from services.assembly import get_all_assembly_clients
     try:
         all_clients = await get_all_assembly_clients(settings.ASSEMBLY_API_KEY)

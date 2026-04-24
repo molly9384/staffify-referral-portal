@@ -12,13 +12,17 @@ Encryption details (from SDK source):
   - Output: UTF-8 JSON string
 """
 
+import asyncio
 import hmac as hmac_module
 import hashlib
 import json
+import logging
 import httpx
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
+
+logger = logging.getLogger(__name__)
 
 ASSEMBLY_API_BASE = "https://api.assembly.com/v1"
 
@@ -98,10 +102,13 @@ def get_assembly_client(api_key: str, client_id: str) -> dict:
 ASSEMBLY_VA_FIELD_KEY = "currentVas"
 
 
-async def get_all_assembly_clients(api_key: str) -> list:
+async def get_all_assembly_clients(api_key: str, max_retries: int = 3) -> list:
     """
     Fetch all Assembly clients (paginated).
     Returns a list of dicts with: id, givenName, familyName, companyId, etc.
+
+    Retries up to max_retries times on 429 Too Many Requests, with exponential
+    backoff (5s, 10s, 20s) so the VA sync job survives brief rate-limit windows.
     """
     all_clients = []
     url = f"{ASSEMBLY_API_BASE}/clients"
@@ -109,12 +116,30 @@ async def get_all_assembly_clients(api_key: str) -> list:
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         while url:
-            response = await client.get(
-                url,
-                headers={"X-API-KEY": api_key},
-                params=params,
-            )
-            response.raise_for_status()
+            last_exc = None
+            for attempt in range(max_retries):
+                response = await client.get(
+                    url,
+                    headers={"X-API-KEY": api_key},
+                    params=params,
+                )
+                if response.status_code == 429:
+                    wait = 5 * (2 ** attempt)  # 5s, 10s, 20s
+                    logger.warning(
+                        f"Assembly GET /clients returned 429 — "
+                        f"retrying in {wait}s (attempt {attempt + 1}/{max_retries})"
+                    )
+                    await asyncio.sleep(wait)
+                    last_exc = httpx.HTTPStatusError(
+                        f"429 Too Many Requests", request=response.request, response=response
+                    )
+                    continue
+                response.raise_for_status()
+                last_exc = None
+                break
+            else:
+                raise last_exc
+
             data = response.json()
             all_clients.extend(data.get("data", []))
             cursor = data.get("nextCursor") or data.get("pageInfo", {}).get("cursor")
