@@ -107,12 +107,20 @@ SKIP_ASSEMBLY_CLIENTS = {"patrick szydlik"}
 
 
 async def job_sync_vas():
-    """Every 15 minutes — sync Hubstaff project VA assignments to Assembly company records."""
+    """Hourly — sync Hubstaff project VA assignments to Assembly company records.
+
+    DB-first design: clients already mapped in the DB (assembly_company_id set)
+    are updated with zero Assembly read-API calls.  Only clients not yet in the
+    DB require a bulk GET /clients fetch, reducing Assembly rate-limit pressure.
+    """
     logger.info("Starting VA sync job...")
     try:
         from services.hubstaff_service import HubstaffService
         from services.assembly import get_all_assembly_clients, update_company_vas
         from config import settings
+        from database import AsyncSessionLocal
+        from models import Client
+        from sqlalchemy import select as sa_select, update as sa_update
 
         hubstaff = HubstaffService()
         org_id = settings.HUBSTAFF_ORG_ID
@@ -122,59 +130,79 @@ async def job_sync_vas():
             logger.warning("VA sync: ASSEMBLY_API_KEY not set — skipping.")
             return
 
-        # ── Step 1: Load all Assembly clients ──────────────────────────────
-        assembly_clients = await get_all_assembly_clients(api_key)
-
-        # Build: full name → companyId (skip excluded clients and those without a company)
-        name_to_company_id: dict[str, str] = {}
-        all_company_ids: set[str] = set()
-
-        for c in assembly_clients:
-            given = (c.get("givenName") or "").strip()
-            family = (c.get("familyName") or "").strip()
-            full_name = f"{given} {family}".strip()
-            company_id = c.get("companyId")
-
-            if not full_name or not company_id:
-                continue
-            if full_name.lower() in SKIP_ASSEMBLY_CLIENTS:
-                continue
-
-            name_to_company_id[full_name] = company_id
-            all_company_ids.add(company_id)
-
-        logger.info(f"VA sync: loaded {len(name_to_company_id)} Assembly clients across {len(all_company_ids)} companies")
-
-        # ── Step 2: Process active Hubstaff projects ───────────────────────
+        # ── Step 1: Get active Hubstaff projects ───────────────────────────
         projects = await hubstaff.get_projects(org_id)
         active_projects = [
             p for p in projects
             if p.get("status") == "active"
             and p.get("name", "").strip().lower() not in SKIP_HUBSTAFF_PROJECTS
         ]
-
         logger.info(f"VA sync: processing {len(active_projects)} active Hubstaff projects")
 
+        # ── Step 2: Load existing DB mappings (assembly_company_id) ────────
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                sa_select(Client.hubstaff_project_id, Client.assembly_company_id)
+                .where(Client.assembly_company_id.isnot(None))
+            )
+            db_mappings: dict[str, str] = {
+                str(row.hubstaff_project_id): row.assembly_company_id
+                for row in result.fetchall()
+                if row.hubstaff_project_id
+            }
+        logger.info(f"VA sync: {len(db_mappings)} projects already mapped in DB")
+
+        # Identify which projects still need Assembly name-matching
+        unmapped_projects = [
+            p for p in active_projects
+            if str(p["id"]) not in db_mappings
+        ]
+
+        # ── Step 3: Fetch Assembly clients ONLY for unmapped projects ───────
+        name_to_company_id: dict[str, str] = {}
+        all_company_ids: set[str] = set()
+
+        if unmapped_projects:
+            logger.info(f"VA sync: {len(unmapped_projects)} projects need Assembly lookup")
+            try:
+                assembly_clients = await get_all_assembly_clients(api_key)
+                for c in assembly_clients:
+                    given = (c.get("givenName") or "").strip()
+                    family = (c.get("familyName") or "").strip()
+                    full_name = f"{given} {family}".strip()
+                    company_id = c.get("companyId")
+                    if not full_name or not company_id:
+                        continue
+                    if full_name.lower() in SKIP_ASSEMBLY_CLIENTS:
+                        continue
+                    name_to_company_id[full_name] = company_id
+                    all_company_ids.add(company_id)
+                logger.info(f"VA sync: loaded {len(name_to_company_id)} Assembly clients")
+            except Exception as e:
+                logger.warning(f"VA sync: Assembly client fetch failed ({e}) — will update DB-mapped clients only")
+        else:
+            logger.info("VA sync: all projects already in DB — skipping Assembly client fetch")
+
+        # ── Step 4: Update each active project ────────────────────────────
         handled_company_ids: set[str] = set()
 
         for project in active_projects:
             project_name = project["name"].strip()
-            project_id = project["id"]
+            project_id = str(project["id"])
 
-            # Apply name override if this project name doesn't match Assembly directly
-            assembly_name = HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES.get(project_name, project_name)
-            company_id = name_to_company_id.get(assembly_name)
+            # Resolve company_id: DB first, then Assembly name-match
+            company_id = db_mappings.get(project_id)
+            if not company_id:
+                assembly_name = HUBSTAFF_TO_ASSEMBLY_NAME_OVERRIDES.get(project_name, project_name)
+                company_id = name_to_company_id.get(assembly_name)
 
             if not company_id:
-                logger.warning(
-                    f"VA sync: no Assembly match for Hubstaff project '{project_name}' "
-                    f"(looked up as '{assembly_name}') — skipping"
-                )
+                logger.warning(f"VA sync: no company_id for '{project_name}' — skipping")
                 continue
 
-            # Get project members with role=user (excludes admins/viewers)
+            # Get VA members from Hubstaff
             try:
-                members = await hubstaff.get_project_members(project_id)
+                members = await hubstaff.get_project_members(project["id"])
             except Exception as e:
                 logger.error(f"VA sync: failed to fetch members for '{project_name}': {e}")
                 continue
@@ -185,12 +213,7 @@ async def job_sync_vas():
                 if m.get("membership_role") == "user"
                 and m.get("user", {}).get("name")
             ]
-
-            if va_names:
-                va_value = ", ".join(va_names)
-            else:
-                # Project exists but no VAs assigned
-                va_value = "*Sourcing Replacement*"
+            va_value = ", ".join(va_names) if va_names else "*Sourcing Replacement*"
 
             try:
                 await update_company_vas(api_key, company_id, va_value)
@@ -200,31 +223,31 @@ async def job_sync_vas():
                 logger.error(f"VA sync: failed to update Assembly for '{project_name}': {e}")
                 continue
 
-            # Auto-populate assembly_company_id on the matching Client record so the
-            # hours/invoices widget can look up by companyId without any manual mapping.
-            try:
-                from database import AsyncSessionLocal
-                from models import Client
-                from sqlalchemy import update as sa_update
+            # Write company_id back to DB so future syncs skip the Assembly fetch
+            if project_id not in db_mappings:
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await db.execute(
+                            sa_update(Client)
+                            .where(Client.hubstaff_project_id == project_id)
+                            .values(assembly_company_id=company_id)
+                        )
+                        await db.commit()
+                except Exception as e:
+                    logger.warning(f"VA sync: could not write assembly_company_id for '{project_name}': {e}")
 
-                async with AsyncSessionLocal() as db:
-                    await db.execute(
-                        sa_update(Client)
-                        .where(Client.hubstaff_project_id == str(project_id))
-                        .values(assembly_company_id=company_id)
-                    )
-                    await db.commit()
-            except Exception as e:
-                logger.warning(f"VA sync: could not write assembly_company_id for '{project_name}': {e}")
-
-        # ── Step 3: Mark Assembly companies with no Hubstaff project ───────
-        unhandled_company_ids = all_company_ids - handled_company_ids
-        for company_id in unhandled_company_ids:
-            try:
-                await update_company_vas(api_key, company_id, "*New Client - Sourcing*")
-                logger.info(f"VA sync: company {company_id} has no Hubstaff project → '*New Client - Sourcing*'")
-            except Exception as e:
-                logger.error(f"VA sync: failed to update company {company_id}: {e}")
+        # ── Step 5: Mark unmapped Assembly companies as sourcing ────────────
+        # Only possible when we have the full Assembly client list
+        if name_to_company_id:
+            unhandled_company_ids = all_company_ids - handled_company_ids
+            for company_id in unhandled_company_ids:
+                try:
+                    await update_company_vas(api_key, company_id, "*New Client - Sourcing*")
+                    logger.info(f"VA sync: company {company_id} → '*New Client - Sourcing*'")
+                except Exception as e:
+                    logger.error(f"VA sync: failed to update company {company_id}: {e}")
+        else:
+            unhandled_company_ids = set()
 
         logger.info(
             f"VA sync finished — "

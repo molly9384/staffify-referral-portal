@@ -148,6 +148,23 @@ async def get_hubstaff_project_for_token(token: str) -> tuple[str, str]:
         except Exception:
             pass
 
+    # Step B1b: targeted company fetch — GET /clients?companyId=xxx
+    # Much lighter than the bulk list: returns only the 1-5 people in this
+    # specific company, so it's far less likely to trigger rate limits.
+    # Handles team members & internal users whose own name doesn't match.
+    from services.assembly import get_assembly_clients_for_company
+    company_clients = await get_assembly_clients_for_company(settings.ASSEMBLY_API_KEY, company_id)
+    for c in company_clients:
+        given = (c.get("givenName") or "").strip()
+        family = (c.get("familyName") or "").strip()
+        full = f"{given} {family}".strip()
+        if not full:
+            continue
+        result = match_project(full)
+        if result:
+            await _write_back_company_id(company_id, result[0])
+            return result
+
     # Step B2: search the in-memory cache for ANY member of this company.
     # This handles team members, internal users, and test accounts whose own
     # name doesn't match a Hubstaff project — as long as someone else in the

@@ -115,6 +115,31 @@ def decrypt_assembly_token(api_key: str, encrypted_token: str) -> dict:
         raise ValueError(f"Unexpected error decrypting Assembly token: {e}")
 
 
+async def get_assembly_clients_for_company(api_key: str, company_id: str) -> list:
+    """
+    Fetch only the clients belonging to a specific Assembly company.
+    Uses GET /clients?companyId=xxx — a targeted call that returns 1-5 records
+    instead of all 500, so it's far less likely to hit rate limits.
+
+    Returns empty list if Assembly doesn't support this filter or if rate-limited.
+    Never raises — callers should treat an empty result as "not found".
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{ASSEMBLY_API_BASE}/clients",
+                headers={"X-API-KEY": api_key},
+                params={"companyId": company_id, "limit": 50},
+            )
+            if response.status_code in (429, 404):
+                return []
+            response.raise_for_status()
+            data = response.json()
+            return data.get("data", [])
+    except Exception:
+        return []
+
+
 def get_assembly_client(api_key: str, client_id: str) -> dict:
     """
     Fetch a client's details from the Assembly API by their Assembly client ID.
