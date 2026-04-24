@@ -111,10 +111,18 @@ export default function App() {
     if (!silent) setLoading(true)
     setError('')
     setNoProject(false)
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 12000) // 12s max
+
     try {
       // Pass the client's local date so the UTC server uses the viewer's actual day
       const localDate = new Date().toLocaleDateString('en-CA') // → "YYYY-MM-DD"
-      const res = await fetch(`${API_BASE}/api/widget/hours?token=${encodeURIComponent(token)}&local_date=${localDate}`)
+      const res = await fetch(
+        `${API_BASE}/api/widget/hours?token=${encodeURIComponent(token)}&local_date=${localDate}`,
+        { signal: controller.signal }
+      )
+      clearTimeout(timeout)
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         if (res.status === 404) {
@@ -127,7 +135,12 @@ export default function App() {
       setData(await res.json())
       setLastUpdated(new Date())
     } catch (e) {
-      setError(e.message || 'Failed to load hours.')
+      clearTimeout(timeout)
+      if (e.name === 'AbortError') {
+        setError('Request timed out. Please try again.')
+      } else {
+        setError('Unable to load hours right now. Please try again shortly.')
+      }
     } finally {
       setLoading(false)
     }
