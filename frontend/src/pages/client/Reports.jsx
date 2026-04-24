@@ -328,7 +328,7 @@ export default function ClientReports() {
                           <td className="px-6 py-3 text-gray-700">{Number(c.hours_worked).toFixed(1)}</td>
                           <td className="px-6 py-3 font-medium text-gray-900">{formatCurrency(c.credit_amount)}</td>
                           <td className="px-6 py-3">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${CREDIT_STATUS_COLORS[c.status] || 'bg-gray-100 text-gray-600'}`}>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${CREDIT_STATUS_COLORS[c.status] || 'bg-gray-100 text-gray-600'}`}>
                               {CREDIT_STATUS_LABELS[c.status] || c.status}
                             </span>
                           </td>

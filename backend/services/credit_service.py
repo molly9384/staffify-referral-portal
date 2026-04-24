@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -209,12 +209,23 @@ class CreditService:
                     if credit_amount <= 0:
                         continue
 
-                    # Use invoice_date as period_start; due_date or invoice_date as period_end
-                    raw_start = invoice.get("invoice_date") or invoice.get("start_date") or str(date.today())
-                    raw_end = invoice.get("due_date") or invoice.get("end_date") or raw_start
+                    # Use the actual billing period dates (start_date/end_date) from Hubstaff.
+                    # invoice_date is when the invoice was generated (day AFTER period ends),
+                    # not when the period started — so we must not use it as period_start.
+                    # Fallback: derive period from invoice_date (period ends the day before).
+                    raw_start = invoice.get("start_date")
+                    raw_end = invoice.get("end_date")
                     try:
-                        period_start = date.fromisoformat(str(raw_start)[:10])
-                        period_end = date.fromisoformat(str(raw_end)[:10])
+                        if raw_start and raw_end:
+                            period_start = date.fromisoformat(str(raw_start)[:10])
+                            period_end = date.fromisoformat(str(raw_end)[:10])
+                        else:
+                            # Derive: invoice_date is the first day of the NEW period,
+                            # so the billing period ended the day before.
+                            inv_date_str = invoice.get("invoice_date") or str(date.today())
+                            inv_date = date.fromisoformat(str(inv_date_str)[:10])
+                            period_end = inv_date - timedelta(days=1)
+                            period_start = period_end - timedelta(days=13)
                     except ValueError:
                         period_start = period_end = date.today()
 
