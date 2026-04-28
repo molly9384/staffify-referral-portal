@@ -66,8 +66,8 @@ export default function Dashboard() {
         />
         <StatCard
           label="Credits Pending Application"
-          value={summary ? formatCurrency(summary.total_eligible) : null}
-          sub={summary ? `${summary.eligible_count} eligible` : null}
+          value={summary ? formatCurrency((summary.total_pending ?? 0) + (summary.total_eligible ?? 0)) : null}
+          sub={summary ? `${summary.pending_count ?? 0} pending · ${summary.eligible_count ?? 0} eligible` : null}
           loading={loading}
           color="amber"
           icon={
