@@ -239,3 +239,86 @@ async def list_hubstaff_projects(
         return projects
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch projects: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# TEMPORARY: PTO API exploration — delete once field structure is confirmed
+# ---------------------------------------------------------------------------
+
+@router.get("/api/hubstaff/debug/leaves", include_in_schema=False)
+async def debug_leaves(
+    current_user: User = Depends(require_admin),
+):
+    """
+    Raw Hubstaff leaves response for a rolling 90-day window.
+    Shows full field structure for both leave entries and leave types.
+    DELETE THIS ENDPOINT once field names are confirmed.
+    """
+    from services.hubstaff_service import HubstaffService
+    from datetime import date, timedelta
+    import httpx
+
+    service = HubstaffService()
+    org_id = settings.HUBSTAFF_ORG_ID
+    end = date.today()
+    start = end - timedelta(days=90)
+
+    url = f"https://api.hubstaff.com/v2/organizations/{org_id}/leaves"
+    try:
+        response = await service._make_request(
+            "GET", url,
+            params={
+                "date[start]": start.isoformat(),
+                "date[stop]": end.isoformat(),
+                "include[]": ["users", "leave_types"],
+                "page_size": 10,
+            },
+        )
+        raw = response.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Hubstaff leaves call failed: {e}")
+
+    # Annotate with field names at the top level for easy reading
+    leaves_sample = raw.get("leaves", [])[:3]
+    leave_types_sample = raw.get("leave_types", [])[:5]
+
+    return {
+        "_note": "Raw Hubstaff response — check field names, duration units, and paid flag location",
+        "top_level_keys": list(raw.keys()),
+        "leaves_count": len(raw.get("leaves", [])),
+        "leaves_sample": leaves_sample,
+        "leave_types_sample": leave_types_sample,
+        "users_sample": raw.get("users", [])[:3],
+    }
+
+
+@router.get("/api/hubstaff/debug/project-member-rates/{project_id}", include_in_schema=False)
+async def debug_project_member_rates(
+    project_id: str,
+    current_user: User = Depends(require_admin),
+):
+    """
+    Raw project members response for a single project — shows all fields
+    including any billing/pay rate fields.
+    DELETE THIS ENDPOINT once field names are confirmed.
+    """
+    from services.hubstaff_service import HubstaffService
+
+    service = HubstaffService()
+    url = f"https://api.hubstaff.com/v2/projects/{project_id}/members"
+    try:
+        response = await service._make_request(
+            "GET", url,
+            params={"include[]": ["users", "pay_rates", "billing_rates"]},
+        )
+        raw = response.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Hubstaff project members call failed: {e}")
+
+    return {
+        "_note": "Raw Hubstaff project members response — look for billing_rate / pay_rate fields",
+        "top_level_keys": list(raw.keys()),
+        "members_count": len(raw.get("members", [])),
+        "members_raw": raw.get("members", []),
+        "all_included_keys": {k: v[:2] if isinstance(v, list) else v for k, v in raw.items() if k != "members"},
+    }
