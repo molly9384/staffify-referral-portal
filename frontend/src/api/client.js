@@ -140,6 +140,9 @@ export const restoreReferral = (id) =>
 export const deleteReferral = (id) =>
   apiClient.delete(`/referrals/${id}`)
 
+export const linkClients = (data) =>
+  apiClient.post('/referrals/link-clients', data).then((r) => r.data)
+
 // ---- Virtual Assistants ----
 
 export const getVAsForReferral = (referralId) =>

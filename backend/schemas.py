@@ -219,6 +219,23 @@ class ReferralStatusUpdate(BaseModel):
     activation_date: Optional[date] = None
 
 
+class VAForLink(BaseModel):
+    hubstaff_user_id: Optional[str] = None
+    hubstaff_user_name: str
+    start_date: date
+    is_eligible: bool = True
+
+
+class LinkClientsRequest(BaseModel):
+    referring_client_id: uuid.UUID
+    referred_client_id: uuid.UUID
+    referral_date: date
+    activation_date: Optional[date] = None
+    status: ReferralStatus = ReferralStatus.va_billing
+    notes: Optional[str] = None
+    vas: Optional[List[VAForLink]] = None
+
+
 class ReferralOut(ReferralBase):
     id: uuid.UUID
     referred_client_id: Optional[uuid.UUID] = None

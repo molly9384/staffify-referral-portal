@@ -12,7 +12,8 @@ from config import settings
 from database import get_db
 from models import Referral, CreditLedger, User, UserRole, ReferralStatus
 from schemas import (
-    ReferralCreate, ReferralOut, ReferralUpdate, ReferralStatusUpdate, CreditLedgerOut
+    ReferralCreate, ReferralOut, ReferralUpdate, ReferralStatusUpdate, CreditLedgerOut,
+    LinkClientsRequest,
 )
 
 router = APIRouter()
@@ -187,6 +188,106 @@ async def create_referral(
                 asyncio.create_task(send_email(client_emails, subject, html))
         except Exception as e:
             print(f"Referral confirmation email failed: {e}")
+
+    return created
+
+
+@router.post("/link-clients", response_model=ReferralOut, status_code=status.HTTP_201_CREATED)
+async def link_clients(
+    link_in: LinkClientsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin-only: link two existing clients as a referral pair (backfills historical referrals)."""
+    from models import Client, VirtualAssistant
+
+    if link_in.referring_client_id == link_in.referred_client_id:
+        raise HTTPException(status_code=400, detail="Referring and referred clients must be different")
+
+    referring_result = await db.execute(select(Client).where(Client.id == link_in.referring_client_id))
+    referring_client = referring_result.scalar_one_or_none()
+    if not referring_client:
+        raise HTTPException(status_code=404, detail="Referring client not found")
+
+    referred_result = await db.execute(select(Client).where(Client.id == link_in.referred_client_id))
+    referred_client = referred_result.scalar_one_or_none()
+    if not referred_client:
+        raise HTTPException(status_code=404, detail="Referred client not found")
+
+    # Determine activation date
+    activation_date = link_in.activation_date
+    if link_in.status == ReferralStatus.va_billing and not activation_date:
+        activation_date = date.today()
+
+    # Calculate expiration date (12 months from activation)
+    expiration_date = None
+    if activation_date:
+        try:
+            from dateutil.relativedelta import relativedelta
+            expiration_date = activation_date + relativedelta(months=12)
+        except ImportError:
+            exp_year = activation_date.year + 1
+            expiration_date = date(exp_year, activation_date.month, activation_date.day)
+
+    referral = Referral(
+        referring_client_id=link_in.referring_client_id,
+        referred_client_id=link_in.referred_client_id,
+        referred_name=referred_client.name,
+        referred_email=referred_client.email,
+        referral_date=link_in.referral_date,
+        activation_date=activation_date,
+        expiration_date=expiration_date,
+        status=link_in.status,
+        pipeline_notes=link_in.notes,
+        is_active=True,
+    )
+    db.add(referral)
+    await db.flush()
+
+    # Create VA records if provided
+    if link_in.vas:
+        for va_data in link_in.vas:
+            va = VirtualAssistant(
+                referral_id=referral.id,
+                hubstaff_user_id=va_data.hubstaff_user_id or None,
+                hubstaff_user_name=va_data.hubstaff_user_name,
+                start_date=va_data.start_date,
+                is_eligible=va_data.is_eligible,
+                is_active=True,
+            )
+            db.add(va)
+        await db.flush()
+
+    # Load with relationships for response
+    result = await db.execute(
+        select(Referral)
+        .where(Referral.id == referral.id)
+        .options(
+            selectinload(Referral.referring_client),
+            selectinload(Referral.referred_client),
+            selectinload(Referral.virtual_assistants),
+        )
+    )
+    created = result.scalar_one()
+
+    # Fire status-appropriate email to referring client (no Slack — this is a backfill)
+    try:
+        import asyncio
+        from services.email_service import (
+            send_email, get_client_emails,
+            email_referral_active, email_referral_paused,
+        )
+        client_emails = await get_client_emails(db, link_in.referring_client_id)
+        if client_emails:
+            if link_in.status == ReferralStatus.va_billing:
+                act = activation_date.strftime("%B %-d, %Y") if activation_date else "recently"
+                subject, html = email_referral_active(referring_client.name, referred_client.name, act)
+                asyncio.create_task(send_email(client_emails, subject, html))
+            elif link_in.status == ReferralStatus.paused:
+                subject, html = email_referral_paused(referring_client.name, referred_client.name, link_in.notes or "")
+                asyncio.create_task(send_email(client_emails, subject, html))
+    except Exception as e:
+        print(f"Link clients email failed: {e}")
 
     return created
 
