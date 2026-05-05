@@ -26,7 +26,7 @@ export default function Dashboard() {
     load()
   }, [])
 
-  const activeReferrals = referrals.filter((r) => r.status === 'active').length
+  const activeReferrals = referrals.filter((r) => r.status === 'va_billing' || r.status === 'active').length
   const recentReferrals = [...referrals].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8)
 
   return (
