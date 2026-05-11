@@ -101,9 +101,6 @@ class CreditService:
         if not referral.referred_client or not referral.referred_client.is_active:
             print(f"[DEBUG eligible] FAIL: referred client missing or inactive")
             return False
-        if not referral.referred_client.hubstaff_project_id:
-            print(f"[DEBUG eligible] FAIL: no hubstaff_project_id on referred client")
-            return False
 
         eligible_va = await self.get_eligible_va(referral_id)
         if not eligible_va or not eligible_va.hubstaff_user_name:
