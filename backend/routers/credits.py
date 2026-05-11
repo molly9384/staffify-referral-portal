@@ -314,6 +314,47 @@ async def mark_credit_eligible(
     return credit
 
 
+@router.post("/{credit_id}/mark-applied", response_model=CreditLedgerOut)
+async def mark_credit_applied(
+    credit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Manually mark a voided credit as applied (e.g. after a manual QBO adjustment)."""
+    result = await db.execute(
+        select(CreditLedger)
+        .where(CreditLedger.id == credit_id)
+        .options(selectinload(CreditLedger.referral))
+    )
+    credit = result.scalar_one_or_none()
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit entry not found")
+    if credit.status != CreditStatus.voided:
+        raise HTTPException(status_code=400, detail=f"Credit is '{credit.status}', not voided — only voided credits can be manually marked applied")
+
+    from datetime import date as date_type
+    credit.status = CreditStatus.applied
+    credit.applied_date = date_type.today()
+    credit.notes = (
+        (credit.notes or "") + f" [Manually marked applied on {date_type.today()}]"
+    ).strip()
+
+    # Restore referral totals that were reduced when this credit was voided
+    referral_result = await db.execute(select(Referral).where(Referral.id == credit.referral_id))
+    referral = referral_result.scalar_one_or_none()
+    if referral:
+        referral.total_credits_earned = (
+            Decimal(str(referral.total_credits_earned)) + Decimal(str(credit.credit_amount))
+        )
+        referral.total_credits_applied = (
+            Decimal(str(referral.total_credits_applied)) + Decimal(str(credit.credit_amount))
+        )
+
+    await db.commit()
+    await db.refresh(credit)
+    return credit
+
+
 @router.post("/{credit_id}/recalculate", response_model=CreditLedgerOut)
 async def recalculate_credit(
     credit_id: uuid.UUID,
