@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCredits, getCreditSummary, pullCredits, verifyCredits, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible, markCreditApplied } from '../../api/client'
+import { getCredits, getCreditSummary, pullCredits, verifyCredits, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible, restoreCredit } from '../../api/client'
 import CreditSummaryComponent from '../../components/CreditSummary'
 import { formatDate, formatCurrency } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
@@ -182,13 +182,13 @@ export default function Credits() {
     }
   }
 
-  const handleMarkApplied = async (creditId) => {
+  const handleRestoreCredit = async (creditId) => {
     try {
-      await markCreditApplied(creditId)
-      setSuccessMsg('Credit marked as applied and totals updated.')
+      await restoreCredit(creditId)
+      setSuccessMsg('Credit restored to eligible — it will be applied on the next apply run.')
       await Promise.all([load(), loadSummary()])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to mark as applied.')
+      setError(err?.response?.data?.detail || 'Failed to restore credit.')
     }
   }
 
@@ -373,11 +373,11 @@ export default function Credits() {
                         <div className="flex items-center justify-end gap-1.5">
                           {credit.status === 'voided' && (
                             <button
-                              onClick={() => handleMarkApplied(credit.id)}
-                              className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
-                              title="Mark as manually applied to QBO"
+                              onClick={() => handleRestoreCredit(credit.id)}
+                              className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                              title="Restore to eligible so it applies on the next run"
                             >
-                              Mark Applied
+                              Restore
                             </button>
                           )}
                           {credit.status === 'pending' && (

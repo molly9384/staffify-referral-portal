@@ -314,13 +314,13 @@ async def mark_credit_eligible(
     return credit
 
 
-@router.post("/{credit_id}/mark-applied", response_model=CreditLedgerOut)
-async def mark_credit_applied(
+@router.post("/{credit_id}/restore", response_model=CreditLedgerOut)
+async def restore_credit(
     credit_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin_only),
 ):
-    """Manually mark a voided credit as applied (e.g. after a manual QBO adjustment)."""
+    """Restore a voided credit back to eligible so it gets applied on the next apply run."""
     result = await db.execute(
         select(CreditLedger)
         .where(CreditLedger.id == credit_id)
@@ -330,24 +330,20 @@ async def mark_credit_applied(
     if not credit:
         raise HTTPException(status_code=404, detail="Credit entry not found")
     if credit.status != CreditStatus.voided:
-        raise HTTPException(status_code=400, detail=f"Credit is '{credit.status}', not voided — only voided credits can be manually marked applied")
+        raise HTTPException(status_code=400, detail=f"Credit is '{credit.status}', not voided — only voided credits can be restored")
 
     from datetime import date as date_type
-    credit.status = CreditStatus.applied
-    credit.applied_date = date_type.today()
+    credit.status = CreditStatus.eligible
     credit.notes = (
-        (credit.notes or "") + f" [Manually marked applied on {date_type.today()}]"
+        (credit.notes or "") + f" [Restored to eligible on {date_type.today()}]"
     ).strip()
 
-    # Restore referral totals that were reduced when this credit was voided
+    # Restore total_credits_earned on the referral (was reduced when voided)
     referral_result = await db.execute(select(Referral).where(Referral.id == credit.referral_id))
     referral = referral_result.scalar_one_or_none()
     if referral:
         referral.total_credits_earned = (
             Decimal(str(referral.total_credits_earned)) + Decimal(str(credit.credit_amount))
-        )
-        referral.total_credits_applied = (
-            Decimal(str(referral.total_credits_applied)) + Decimal(str(credit.credit_amount))
         )
 
     await db.commit()
