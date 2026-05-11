@@ -103,7 +103,8 @@ export default function Credits() {
     try {
       const params = activeTab !== 'all' ? { status: activeTab } : {}
       const data = await getCredits(params)
-      setCredits(data)
+      // Hide voided from the "All" tab — they're only visible under the Voided tab
+      setCredits(activeTab === 'all' ? data.filter((c) => c.status !== 'voided') : data)
     } catch {
       setError('Failed to load credits.')
     } finally {

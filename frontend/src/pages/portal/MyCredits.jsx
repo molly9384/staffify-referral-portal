@@ -21,7 +21,8 @@ export default function MyCredits() {
     try {
       const params = activeTab !== 'all' ? { status: activeTab } : {}
       const data = await getCredits(params)
-      setCredits(data)
+      // Never show voided credits to clients
+      setCredits(data.filter((c) => c.status !== 'voided'))
     } catch {
       setError('Failed to load your credits.')
     } finally {
