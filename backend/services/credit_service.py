@@ -127,9 +127,9 @@ class CreditService:
         line_items = invoice.get("line_items", [])
         total_hours = Decimal("0")
 
-        prefix = va_name + " - "
+        prefix = (va_name.strip() + " - ").lower()
         for item in line_items:
-            description = item.get("description", "")
+            description = item.get("description", "").strip().lower()
             if description.startswith(prefix):
                 total_hours += _parse_hours(item)
 
