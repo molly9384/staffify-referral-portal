@@ -442,6 +442,11 @@ class CreditService:
         # multiple credits stacking on the same invoice don't over-apply
         invoice_balance_remaining: dict[str, Decimal] = {}
 
+        # Track referrals already applied in THIS run — prevents applying two
+        # credits for the same referral to the same QBO invoice in one pass.
+        # Credits are deferred (not voided) so they apply next cycle.
+        applied_referral_invoice_pairs: set[tuple] = set()
+
         for credit in pending_credits:
             try:
                 referring_client = credit.referral.referring_client
@@ -475,34 +480,15 @@ class CreditService:
                     skipped += 1
                     continue
 
-                # Only one credit per referral ever — if any applied credit already
-                # exists for this referral (on any invoice), void this one immediately.
-                # Duplicate credits from the same referral are forfeited, not deferred.
-                dup_check = await self.db.execute(
-                    select(CreditLedger).where(
-                        CreditLedger.referral_id == credit.referral_id,
-                        CreditLedger.status == CreditStatus.applied,
-                    )
-                )
-                if dup_check.scalar_one_or_none():
-                    original_amount = Decimal(str(credit.credit_amount))
-                    credit.status = CreditStatus.voided
+                # Don't apply two credits for the same referral to the same QBO invoice
+                # in a single run — defer the second one to the next cycle instead of voiding.
+                pair_key = (credit.referral_id, invoice_id)
+                if pair_key in applied_referral_invoice_pairs:
                     credit.notes = (
-                        (credit.notes or "") + " [Voided: only one credit per referral per billing cycle per program policy]"
+                        (credit.notes or "") + " [Deferred: another credit for this referral was already applied to this invoice this cycle]"
                     ).strip()
-                    voided_excess += original_amount
-                    # Reduce total_credits_earned since this credit is forfeited
-                    referral_result = await self.db.execute(
-                        select(Referral).where(Referral.id == credit.referral_id)
-                    )
-                    referral = referral_result.scalar_one_or_none()
-                    if referral:
-                        referral.total_credits_earned = max(
-                            Decimal("0"),
-                            Decimal(str(referral.total_credits_earned)) - original_amount,
-                        )
-                    print(f"[DEBUG apply] credit {credit.id}: voided ${original_amount} — duplicate for referral {credit.referral_id}")
                     skipped += 1
+                    print(f"[DEBUG apply] credit {credit.id}: deferred — referral {credit.referral_id} already applied to invoice {invoice_id} this run")
                     continue
 
                 original_amount = Decimal(str(credit.credit_amount))
@@ -549,6 +535,7 @@ class CreditService:
 
                 applied += 1
                 total_applied += apply_amount
+                applied_referral_invoice_pairs.add(pair_key)
 
                 # Collect for applied statement email
                 cid = str(credit.referral.referring_client_id)
