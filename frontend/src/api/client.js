@@ -195,8 +195,8 @@ export const deleteCredit = (id) =>
 export const markCreditEligible = (id) =>
   apiClient.post(`/credits/${id}/mark-eligible`).then((r) => r.data)
 
-export const markCreditApplied = (id) =>
-  apiClient.post(`/credits/${id}/mark-applied`).then((r) => r.data)
+export const markCreditApplied = (id, data) =>
+  apiClient.post(`/credits/${id}/mark-applied`, data).then((r) => r.data)
 
 export const restoreCredit = (id) =>
   apiClient.post(`/credits/${id}/restore`).then((r) => r.data)

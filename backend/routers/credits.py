@@ -314,9 +314,15 @@ async def mark_credit_eligible(
     return credit
 
 
+class MarkAppliedRequest(BaseModel):
+    applied_date: Optional[str] = None   # ISO date string; defaults to today
+    qbo_invoice_id: Optional[str] = None  # Invoice reference for the record
+
+
 @router.post("/{credit_id}/mark-applied", response_model=CreditLedgerOut)
 async def mark_credit_applied(
     credit_id: uuid.UUID,
+    body: MarkAppliedRequest = MarkAppliedRequest(),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin_only),
 ):
@@ -333,8 +339,17 @@ async def mark_credit_applied(
         raise HTTPException(status_code=400, detail=f"Credit is '{credit.status}', not eligible — only eligible credits can be manually marked applied")
 
     from datetime import date as date_type
+    applied_date = date_type.today()
+    if body.applied_date:
+        try:
+            applied_date = date_type.fromisoformat(body.applied_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid applied_date format — use YYYY-MM-DD")
+
     credit.status = CreditStatus.applied
-    credit.applied_date = date_type.today()
+    credit.applied_date = applied_date
+    if body.qbo_invoice_id:
+        credit.qbo_invoice_id = body.qbo_invoice_id.strip()
     credit.notes = (
         (credit.notes or "") + f" [Manually marked applied on {date_type.today()} — applied outside QBO automation]"
     ).strip()

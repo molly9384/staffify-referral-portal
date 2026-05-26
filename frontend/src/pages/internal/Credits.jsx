@@ -95,6 +95,9 @@ export default function Credits() {
   const [verifyRunning, setVerifyRunning] = useState(false)
   const [applyRunning, setApplyRunning] = useState(false)
   const [editingCredit, setEditingCredit] = useState(null)
+  const [markingAppliedCredit, setMarkingAppliedCredit] = useState(null) // credit object
+  const [markAppliedForm, setMarkAppliedForm] = useState({ applied_date: '', qbo_invoice_id: '' })
+  const [markAppliedSubmitting, setMarkAppliedSubmitting] = useState(false)
   const [recalculating, setRecalculating] = useState(null) // credit id
   const [deletingCredit, setDeletingCredit] = useState(null) // credit id awaiting confirm
 
@@ -182,13 +185,26 @@ export default function Credits() {
     }
   }
 
-  const handleMarkApplied = async (creditId) => {
+  const openMarkAppliedModal = (credit) => {
+    setMarkAppliedForm({ applied_date: new Date().toISOString().split('T')[0], qbo_invoice_id: '' })
+    setMarkingAppliedCredit(credit)
+  }
+
+  const handleMarkApplied = async (e) => {
+    e.preventDefault()
+    setMarkAppliedSubmitting(true)
     try {
-      await markCreditApplied(creditId)
-      setSuccessMsg('Credit marked as applied manually.')
+      await markCreditApplied(markingAppliedCredit.id, {
+        applied_date: markAppliedForm.applied_date || undefined,
+        qbo_invoice_id: markAppliedForm.qbo_invoice_id || undefined,
+      })
+      setSuccessMsg('Credit marked as applied.')
+      setMarkingAppliedCredit(null)
       await Promise.all([load(), loadSummary()])
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to mark credit applied.')
+    } finally {
+      setMarkAppliedSubmitting(false)
     }
   }
 
@@ -383,7 +399,7 @@ export default function Credits() {
                         <div className="flex items-center justify-end gap-1.5">
                           {credit.status === 'eligible' && (
                             <button
-                              onClick={() => handleMarkApplied(credit.id)}
+                              onClick={() => openMarkAppliedModal(credit)}
                               className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
                               title="Manually mark as applied (bypasses QBO — use when credit was handled outside the automation)"
                             >
@@ -470,6 +486,53 @@ export default function Credits() {
           </div>
         )}
       </div>
+
+      {/* Mark Applied Modal */}
+      {markingAppliedCredit && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900">Mark Credit as Applied</h2>
+              <button onClick={() => setMarkingAppliedCredit(null)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form onSubmit={handleMarkApplied} className="px-6 py-5 space-y-4">
+              <div className="text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
+                <p className="font-medium text-gray-700">{markingAppliedCredit.referral?.referring_client?.name ?? '—'}</p>
+                <p className="text-xs text-gray-400 mt-0.5">→ {markingAppliedCredit.referral?.referred_name ?? '—'}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(markingAppliedCredit.credit_amount)} credit</p>
+              </div>
+              <div>
+                <label className="label">Applied Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  required
+                  value={markAppliedForm.applied_date}
+                  onChange={(e) => setMarkAppliedForm((f) => ({ ...f, applied_date: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Invoice / Reference <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g. QBO invoice ID or reference number"
+                  value={markAppliedForm.qbo_invoice_id}
+                  onChange={(e) => setMarkAppliedForm((f) => ({ ...f, qbo_invoice_id: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setMarkingAppliedCredit(null)} className="btn-secondary flex-1 justify-center">Cancel</button>
+                <button type="submit" disabled={markAppliedSubmitting} className="btn-primary flex-1 justify-center">
+                  {markAppliedSubmitting ? 'Saving…' : 'Mark Applied'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
