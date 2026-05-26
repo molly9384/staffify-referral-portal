@@ -331,7 +331,7 @@ export default function Credits() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Referred Client</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Client</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Invoice #</th>
                   <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Hours</th>
                   <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Credit</th>
@@ -352,8 +352,8 @@ export default function Credits() {
                   return (
                     <tr key={credit.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-3.5">
-                        <p className="font-medium text-gray-900">{credit.referral?.referred_name ?? '—'}</p>
-                        <p className="text-xs text-gray-400">→ {credit.referral?.referring_client?.name ?? '—'}</p>
+                        <p className="font-medium text-gray-900">{credit.referral?.referring_client?.name ?? '—'}</p>
+                        <p className="text-xs text-gray-400">→ {credit.referral?.referred_name ?? '—'}</p>
                       </td>
                       <td className="px-6 py-3.5 text-gray-500 font-mono text-xs">
                         {credit.hubstaff_invoice_number ? `#${credit.hubstaff_invoice_number}` : '—'}

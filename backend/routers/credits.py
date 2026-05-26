@@ -29,7 +29,7 @@ async def list_credits(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    query = select(CreditLedger).options(selectinload(CreditLedger.referral))
+    query = select(CreditLedger).options(selectinload(CreditLedger.referral).selectinload(Referral.referring_client))
 
     if current_user.role == UserRole.client:
         # Clients see credits for referrals they made
@@ -61,7 +61,7 @@ async def list_pending_credits(
     result = await db.execute(
         select(CreditLedger)
         .where(CreditLedger.status == CreditStatus.pending)
-        .options(selectinload(CreditLedger.referral))
+        .options(selectinload(CreditLedger.referral).selectinload(Referral.referring_client))
         .order_by(CreditLedger.created_at.asc())
     )
     return result.scalars().all()

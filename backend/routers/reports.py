@@ -155,6 +155,33 @@ async def get_admin_report(
         .order_by(func.count(Referral.id).desc())
     )
     top_result = await db.execute(top_q)
+
+    # Fetch active referral details per referring client for the expandable breakdown
+    active_detail_result = await db.execute(
+        select(
+            Referral.id,
+            Referral.referred_name,
+            Referral.referring_client_id,
+            Referral.status,
+            Referral.total_credits_earned,
+            Referral.total_credits_applied,
+            Referral.activation_date,
+        )
+        .where(*ref_filters, Referral.status.in_(ACTIVE_STATUSES))
+        .order_by(Referral.referred_name)
+    )
+    active_details_by_client: dict = {}
+    for row in active_detail_result:
+        cid = str(row.referring_client_id)
+        active_details_by_client.setdefault(cid, []).append({
+            "referral_id": str(row.id),
+            "referred_name": row.referred_name,
+            "status": row.status.value if hasattr(row.status, "value") else row.status,
+            "credits_earned": float(row.total_credits_earned or 0),
+            "credits_applied": float(row.total_credits_applied or 0),
+            "activation_date": row.activation_date.isoformat() if row.activation_date else None,
+        })
+
     top_referrers = [
         {
             "client_id": str(row.id),
@@ -163,6 +190,7 @@ async def get_admin_report(
             "active_referrals": int(row.active_referrals or 0),
             "credits_earned": float(row.credits_earned or 0),
             "credits_applied": float(row.credits_applied or 0),
+            "active_referral_details": active_details_by_client.get(str(row.id), []),
         }
         for row in top_result
     ]

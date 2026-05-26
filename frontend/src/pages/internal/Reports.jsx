@@ -116,6 +116,7 @@ export default function AdminReports() {
   const [emailSending, setEmailSending] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState('')
+  const [expandedReferrer, setExpandedReferrer] = useState(null)
 
   useEffect(() => {
     getClients().then(setClients).catch(() => {})
@@ -349,22 +350,54 @@ export default function AdminReports() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {sortedReferrers.map((r, i) => (
-                        <tr key={r.client_id} className="hover:bg-gray-50">
-                          <td className="px-6 py-3 font-medium text-gray-900">
-                            <span className="inline-flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 font-semibold flex-shrink-0">{i + 1}</span>
-                              {r.client_name}
-                            </span>
-                          </td>
-                          <td className="px-6 py-3 text-gray-700">{r.referrals_sent}</td>
-                          <td className="px-6 py-3">
-                            {r.active_referrals > 0 ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">{r.active_referrals}</span>
-                            ) : <span className="text-gray-400">0</span>}
-                          </td>
-                          <td className="px-6 py-3 text-gray-700">{formatCurrency(r.credits_earned)}</td>
-                          <td className="px-6 py-3 text-gray-700">{formatCurrency(r.credits_applied)}</td>
-                        </tr>
+                        <>
+                          <tr key={r.client_id} className="hover:bg-gray-50">
+                            <td className="px-6 py-3 font-medium text-gray-900">
+                              <span className="inline-flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 font-semibold flex-shrink-0">{i + 1}</span>
+                                {r.client_name}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3 text-gray-700">{r.referrals_sent}</td>
+                            <td className="px-6 py-3">
+                              {r.active_referrals > 0 ? (
+                                <button
+                                  onClick={() => setExpandedReferrer(expandedReferrer === r.client_id ? null : r.client_id)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                                >
+                                  {r.active_referrals}
+                                  <svg className={`w-3 h-3 transition-transform ${expandedReferrer === r.client_id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+                              ) : <span className="text-gray-400">0</span>}
+                            </td>
+                            <td className="px-6 py-3 text-gray-700">{formatCurrency(r.credits_earned)}</td>
+                            <td className="px-6 py-3 text-gray-700">{formatCurrency(r.credits_applied)}</td>
+                          </tr>
+                          {expandedReferrer === r.client_id && r.active_referral_details?.length > 0 && (
+                            <tr key={`${r.client_id}-details`} className="bg-green-50/50">
+                              <td colSpan={5} className="px-6 py-3">
+                                <div className="space-y-1.5">
+                                  {r.active_referral_details.map((ref) => (
+                                    <div key={ref.referral_id} className="flex items-center justify-between text-sm py-1.5 px-3 bg-white rounded-lg border border-green-100">
+                                      <div>
+                                        <span className="font-medium text-gray-900">{ref.referred_name}</span>
+                                        {ref.activation_date && (
+                                          <span className="text-xs text-gray-400 ml-2">since {formatDate(ref.activation_date)}</span>
+                                        )}
+                                      </div>
+                                      <div className="flex gap-6 text-xs text-gray-500">
+                                        <span><span className="font-medium text-gray-700">{formatCurrency(ref.credits_earned)}</span> earned</span>
+                                        <span><span className="font-medium text-gray-700">{formatCurrency(ref.credits_applied)}</span> applied</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
                       ))}
                     </tbody>
                   </table>

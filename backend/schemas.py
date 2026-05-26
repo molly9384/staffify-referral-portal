@@ -258,6 +258,7 @@ class ReferralOut(ReferralBase):
 class ReferralBrief(BaseModel):
     id: uuid.UUID
     referred_name: str
+    referring_client: Optional[ClientSummary] = None
 
     model_config = {"from_attributes": True}
 
