@@ -336,7 +336,7 @@ async def mark_credit_applied(
     if not credit:
         raise HTTPException(status_code=404, detail="Credit entry not found")
     if credit.status != CreditStatus.eligible:
-        raise HTTPException(status_code=400, detail=f"Credit is '{credit.status}', not eligible — only eligible credits can be manually marked applied")
+        raise HTTPException(status_code=400, detail=f"Credit is already '{credit.status.value}' — only eligible credits can be manually marked applied")
 
     from datetime import date as date_type
     applied_date = date_type.today()

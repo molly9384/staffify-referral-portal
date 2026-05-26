@@ -98,6 +98,7 @@ export default function Credits() {
   const [markingAppliedCredit, setMarkingAppliedCredit] = useState(null) // credit object
   const [markAppliedForm, setMarkAppliedForm] = useState({ applied_date: '', qbo_invoice_id: '' })
   const [markAppliedSubmitting, setMarkAppliedSubmitting] = useState(false)
+  const [markAppliedError, setMarkAppliedError] = useState('')
   const [recalculating, setRecalculating] = useState(null) // credit id
   const [deletingCredit, setDeletingCredit] = useState(null) // credit id awaiting confirm
 
@@ -187,12 +188,14 @@ export default function Credits() {
 
   const openMarkAppliedModal = (credit) => {
     setMarkAppliedForm({ applied_date: new Date().toISOString().split('T')[0], qbo_invoice_id: '' })
+    setMarkAppliedError('')
     setMarkingAppliedCredit(credit)
   }
 
   const handleMarkApplied = async (e) => {
     e.preventDefault()
     setMarkAppliedSubmitting(true)
+    setMarkAppliedError('')
     try {
       await markCreditApplied(markingAppliedCredit.id, {
         applied_date: markAppliedForm.applied_date || undefined,
@@ -202,7 +205,10 @@ export default function Credits() {
       setMarkingAppliedCredit(null)
       await Promise.all([load(), loadSummary()])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to mark credit applied.')
+      const msg = err?.response?.data?.detail || 'Failed to mark credit applied.'
+      setMarkAppliedError(msg)
+      // Reload so the table reflects the true current status
+      await Promise.all([load(), loadSummary()])
     } finally {
       setMarkAppliedSubmitting(false)
     }
@@ -523,6 +529,9 @@ export default function Credits() {
                   onChange={(e) => setMarkAppliedForm((f) => ({ ...f, qbo_invoice_id: e.target.value }))}
                 />
               </div>
+              {markAppliedError && (
+                <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{markAppliedError}</div>
+              )}
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setMarkingAppliedCredit(null)} className="btn-secondary flex-1 justify-center">Cancel</button>
                 <button type="submit" disabled={markAppliedSubmitting} className="btn-primary flex-1 justify-center">
