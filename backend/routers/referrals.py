@@ -543,7 +543,7 @@ async def get_referral_credits(
     credits_result = await db.execute(
         select(CreditLedger)
         .where(CreditLedger.referral_id == referral_id)
-        .options(selectinload(CreditLedger.referral))
+        .options(selectinload(CreditLedger.referral).selectinload(Referral.referring_client))
         .order_by(CreditLedger.period_start.desc())
     )
     return credits_result.scalars().all()
