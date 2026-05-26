@@ -314,6 +314,43 @@ async def mark_credit_eligible(
     return credit
 
 
+@router.post("/{credit_id}/mark-applied", response_model=CreditLedgerOut)
+async def mark_credit_applied(
+    credit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Manually mark an eligible credit as applied (bypasses QBO — for manual adjustments)."""
+    result = await db.execute(
+        select(CreditLedger)
+        .where(CreditLedger.id == credit_id)
+        .options(selectinload(CreditLedger.referral))
+    )
+    credit = result.scalar_one_or_none()
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit entry not found")
+    if credit.status != CreditStatus.eligible:
+        raise HTTPException(status_code=400, detail=f"Credit is '{credit.status}', not eligible — only eligible credits can be manually marked applied")
+
+    from datetime import date as date_type
+    credit.status = CreditStatus.applied
+    credit.applied_date = date_type.today()
+    credit.notes = (
+        (credit.notes or "") + f" [Manually marked applied on {date_type.today()} — applied outside QBO automation]"
+    ).strip()
+
+    referral_result = await db.execute(select(Referral).where(Referral.id == credit.referral_id))
+    referral = referral_result.scalar_one_or_none()
+    if referral:
+        referral.total_credits_applied = (
+            Decimal(str(referral.total_credits_applied)) + Decimal(str(credit.credit_amount))
+        )
+
+    await db.commit()
+    await db.refresh(credit)
+    return credit
+
+
 @router.post("/{credit_id}/restore", response_model=CreditLedgerOut)
 async def restore_credit(
     credit_id: uuid.UUID,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCredits, getCreditSummary, pullCredits, verifyCredits, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible, restoreCredit } from '../../api/client'
+import { getCredits, getCreditSummary, pullCredits, verifyCredits, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible, markCreditApplied, restoreCredit } from '../../api/client'
 import CreditSummaryComponent from '../../components/CreditSummary'
 import { formatDate, formatCurrency } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
@@ -179,6 +179,16 @@ export default function Credits() {
       await Promise.all([load(), loadSummary()])
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to mark eligible.')
+    }
+  }
+
+  const handleMarkApplied = async (creditId) => {
+    try {
+      await markCreditApplied(creditId)
+      setSuccessMsg('Credit marked as applied manually.')
+      await Promise.all([load(), loadSummary()])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to mark credit applied.')
     }
   }
 
@@ -371,6 +381,15 @@ export default function Credits() {
                       </td>
                       <td className="px-6 py-3.5">
                         <div className="flex items-center justify-end gap-1.5">
+                          {credit.status === 'eligible' && (
+                            <button
+                              onClick={() => handleMarkApplied(credit.id)}
+                              className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+                              title="Manually mark as applied (bypasses QBO — use when credit was handled outside the automation)"
+                            >
+                              Mark Applied
+                            </button>
+                          )}
                           {credit.status === 'voided' && (
                             <button
                               onClick={() => handleRestoreCredit(credit.id)}
