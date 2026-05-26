@@ -534,6 +534,11 @@ class CreditService:
                 total_applied += apply_amount
                 applied_referral_invoice_pairs.add(pair_key)
 
+                # Flush immediately after each credit so the applied status is
+                # persisted to DB before we move on. If the job crashes mid-run,
+                # completed credits won't be reprocessed on the next run.
+                await self.db.flush()
+
                 # Collect for applied statement email
                 cid = str(credit.referral.referring_client_id)
                 rc = credit.referral.referring_client
@@ -558,6 +563,8 @@ class CreditService:
                 print(f"Error applying credit {credit.id}: {e}")
                 continue
 
+        # Final flush picks up any note updates on skipped/deferred credits
+        # (applied credits are already flushed individually above)
         await self.db.flush()
 
         # Send applied credits statement to each referring client

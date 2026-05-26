@@ -248,6 +248,10 @@ class QBOService:
         """
         Apply a referral credit as a named negative line item on an invoice.
         Uses the 'Referral Credit' service item so it appears clearly on the invoice.
+
+        Idempotent: if a line with the same description already exists on the invoice
+        (e.g. the apply job ran twice due to a retry or concurrent cron triggers),
+        the call returns the existing invoice without adding a duplicate line.
         """
         if not self.realm_id:
             raise ValueError("QBO not connected: no realm_id")
@@ -258,6 +262,14 @@ class QBOService:
         invoice = await self.get_invoice(invoice_id)
         sync_token = invoice.get("SyncToken", "0")
         existing_lines = invoice.get("Line", [])
+
+        # Idempotency guard: skip if this exact credit line was already applied.
+        # Protects against double-billing when the apply job runs twice (concurrent
+        # cron triggers, Make.com retries, or a crash after QBO write but before DB commit).
+        for line in existing_lines:
+            if line.get("Description") == description:
+                print(f"[DEBUG QBO] Idempotency: credit already on invoice {invoice_id} — skipping '{description}'")
+                return invoice
 
         # Negative unit price so it reduces the invoice total
         credit_line = {
