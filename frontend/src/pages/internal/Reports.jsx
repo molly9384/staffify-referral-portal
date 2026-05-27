@@ -344,8 +344,7 @@ export default function AdminReports() {
                         <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                         <SortHeader label="Referrals Sent" col="referrals_sent" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                         <SortHeader label="Active" col="active_referrals" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                        <SortHeader label="Credits Earned" col="credits_earned" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                        <SortHeader label="Credits Applied" col="credits_applied" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                        <SortHeader label={startDate ? 'Credits Applied (Period)' : 'Credits Applied'} col="credits_applied" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -372,7 +371,6 @@ export default function AdminReports() {
                                 </button>
                               ) : <span className="text-gray-400">0</span>}
                             </td>
-                            <td className="px-6 py-3 text-gray-700">{formatCurrency(r.credits_earned)}</td>
                             <td className="px-6 py-3 text-gray-700">{formatCurrency(r.credits_applied)}</td>
                           </tr>
                           {expandedReferrer === r.client_id && r.active_referral_details?.length > 0 && (

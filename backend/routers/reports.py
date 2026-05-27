@@ -64,7 +64,7 @@ async def get_admin_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    # Referral filters
+    # Referral filters (by referral_date — for pipeline/activity views)
     ref_filters = [Referral.is_active == True]
     if client_id:
         ref_filters.append(Referral.referring_client_id == client_id)
@@ -73,12 +73,28 @@ async def get_admin_report(
     if end_date:
         ref_filters.append(Referral.referral_date <= end_date)
 
-    # Credit filters
-    credit_filters = []
+    # Credit filters:
+    # - Applied credits filter by applied_date (when the credit was actually paid out)
+    # - Pending/eligible credits filter by period_start/end (the billing period they cover)
+    applied_credit_filters = [CreditLedger.status == CreditStatus.applied]
+    pending_credit_filters = [CreditLedger.status.in_([CreditStatus.pending, CreditStatus.eligible])]
     if start_date:
-        credit_filters.append(CreditLedger.period_start >= start_date)
+        applied_credit_filters.append(CreditLedger.applied_date >= start_date)
+        pending_credit_filters.append(CreditLedger.period_start >= start_date)
     if end_date:
-        credit_filters.append(CreditLedger.period_end <= end_date)
+        applied_credit_filters.append(CreditLedger.applied_date <= end_date)
+        pending_credit_filters.append(CreditLedger.period_end <= end_date)
+    if client_id:
+        applied_credit_filters.append(
+            CreditLedger.referral_id.in_(
+                select(Referral.id).where(Referral.referring_client_id == client_id)
+            )
+        )
+        pending_credit_filters.append(
+            CreditLedger.referral_id.in_(
+                select(Referral.id).where(Referral.referring_client_id == client_id)
+            )
+        )
 
     # Total referrals
     total_ref_result = await db.execute(
@@ -115,26 +131,22 @@ async def get_admin_report(
         for row in pipeline_result
     ]
 
-    # Credit totals by status
-    credit_q = (
-        select(
-            CreditLedger.status,
-            func.sum(CreditLedger.credit_amount).label("total"),
-        )
-        .group_by(CreditLedger.status)
+    # Credit totals — applied credits filtered by applied_date, pending/eligible by period dates
+    applied_sum_result = await db.execute(
+        select(func.coalesce(func.sum(CreditLedger.credit_amount), 0))
+        .where(*applied_credit_filters)
     )
-    if credit_filters:
-        credit_q = credit_q.where(*credit_filters)
-    credit_result = await db.execute(credit_q)
-    credit_by_status = {
-        (row.status.value if hasattr(row.status, "value") else row.status): float(row.total or 0)
-        for row in credit_result
-    }
-    total_earned = sum(credit_by_status.get(s, 0) for s in ["pending", "eligible", "applied"])
-    total_applied = credit_by_status.get("applied", 0)
-    total_pending = credit_by_status.get("pending", 0) + credit_by_status.get("eligible", 0)
+    total_applied = float(applied_sum_result.scalar() or 0)
 
-    # Top referrers
+    pending_sum_result = await db.execute(
+        select(func.coalesce(func.sum(CreditLedger.credit_amount), 0))
+        .where(*pending_credit_filters)
+    )
+    total_pending = float(pending_sum_result.scalar() or 0)
+
+    total_earned = total_applied + total_pending
+
+    # Top referrers — referral counts and active status from referral table
     top_q = (
         select(
             Client.id,
@@ -146,8 +158,6 @@ async def get_admin_report(
                     else_=0,
                 )
             ).label("active_referrals"),
-            func.coalesce(func.sum(Referral.total_credits_earned), 0).label("credits_earned"),
-            func.coalesce(func.sum(Referral.total_credits_applied), 0).label("credits_applied"),
         )
         .join(Referral, Referral.referring_client_id == Client.id)
         .where(*ref_filters)
@@ -155,6 +165,21 @@ async def get_admin_report(
         .order_by(func.count(Referral.id).desc())
     )
     top_result = await db.execute(top_q)
+
+    # Per-client applied credits filtered by applied_date (period-aware)
+    applied_per_client_result = await db.execute(
+        select(
+            Referral.referring_client_id,
+            func.coalesce(func.sum(CreditLedger.credit_amount), 0).label("credits_applied"),
+        )
+        .join(CreditLedger, CreditLedger.referral_id == Referral.id)
+        .where(*applied_credit_filters)
+        .group_by(Referral.referring_client_id)
+    )
+    applied_per_client = {
+        str(row.referring_client_id): float(row.credits_applied)
+        for row in applied_per_client_result
+    }
 
     # Fetch active referral details per referring client for the expandable breakdown
     active_detail_result = await db.execute(
@@ -188,8 +213,7 @@ async def get_admin_report(
             "client_name": row.name,
             "referrals_sent": row.referrals_sent,
             "active_referrals": int(row.active_referrals or 0),
-            "credits_earned": float(row.credits_earned or 0),
-            "credits_applied": float(row.credits_applied or 0),
+            "credits_applied": applied_per_client.get(str(row.id), 0),
             "active_referral_details": active_details_by_client.get(str(row.id), []),
         }
         for row in top_result
