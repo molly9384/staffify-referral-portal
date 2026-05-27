@@ -64,14 +64,13 @@ async def get_admin_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    # Referral filters (by referral_date — for pipeline/activity views)
+    # Referral filters — client filter applies, but date range does NOT filter by
+    # referral_date. Referrals are created months before billing periods, so filtering
+    # by referral_date would hide all active referrals when viewing a credit period.
+    # The date range is used exclusively for credit filtering (applied_date / period dates).
     ref_filters = [Referral.is_active == True]
     if client_id:
         ref_filters.append(Referral.referring_client_id == client_id)
-    if start_date:
-        ref_filters.append(Referral.referral_date >= start_date)
-    if end_date:
-        ref_filters.append(Referral.referral_date <= end_date)
 
     # Credit filters:
     # - Applied credits filter by applied_date (when the credit was actually paid out)
