@@ -465,6 +465,47 @@ async def delete_credit(
     await db.commit()
 
 
+@router.post("/{credit_id}/requeue", response_model=CreditLedgerOut)
+async def requeue_credit(
+    credit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_only),
+):
+    """Reset an applied credit back to eligible so it can be re-applied to QBO."""
+    result = await db.execute(
+        select(CreditLedger)
+        .where(CreditLedger.id == credit_id)
+        .options(selectinload(CreditLedger.referral))
+    )
+    credit = result.scalar_one_or_none()
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit entry not found")
+    if credit.status != CreditStatus.applied:
+        raise HTTPException(status_code=400, detail=f"Credit is '{credit.status.value}' — only applied credits can be requeued")
+
+    from datetime import date as date_type
+    amount = Decimal(str(credit.credit_amount))
+
+    credit.status = CreditStatus.eligible
+    credit.applied_date = None
+    credit.qbo_invoice_id = None
+    credit.notes = (
+        (credit.notes or "") + f" [Requeued for re-application on {date_type.today()}]"
+    ).strip()
+
+    referral_result = await db.execute(select(Referral).where(Referral.id == credit.referral_id))
+    referral = referral_result.scalar_one_or_none()
+    if referral:
+        referral.total_credits_applied = max(
+            Decimal("0"),
+            Decimal(str(referral.total_credits_applied)) - amount,
+        )
+
+    await db.commit()
+    await db.refresh(credit)
+    return credit
+
+
 @router.post("/sync-vas", response_model=MessageResponse)
 async def sync_vas(
     current_user: User = Depends(require_owner),

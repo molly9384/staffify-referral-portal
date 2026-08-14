@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCredits, getCreditSummary, pullCredits, verifyCredits, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible, markCreditApplied, restoreCredit } from '../../api/client'
+import { getCredits, getCreditSummary, pullCredits, verifyCredits, applyCredits, updateCredit, recalculateCredit, deleteCredit, markCreditEligible, markCreditApplied, restoreCredit, requeueCredit } from '../../api/client'
 import CreditSummaryComponent from '../../components/CreditSummary'
 import { formatDate, formatCurrency } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
@@ -101,6 +101,7 @@ export default function Credits() {
   const [markAppliedError, setMarkAppliedError] = useState('')
   const [recalculating, setRecalculating] = useState(null) // credit id
   const [deletingCredit, setDeletingCredit] = useState(null) // credit id awaiting confirm
+  const [requeuingCredit, setRequeuingCredit] = useState(null) // credit id awaiting confirm
 
   const load = async () => {
     setLoading(true)
@@ -211,6 +212,18 @@ export default function Credits() {
       await Promise.all([load(), loadSummary()])
     } finally {
       setMarkAppliedSubmitting(false)
+    }
+  }
+
+  const handleRequeue = async (creditId) => {
+    try {
+      await requeueCredit(creditId)
+      setRequeuingCredit(null)
+      setSuccessMsg('Credit requeued — it will be re-applied on the next apply run.')
+      await Promise.all([load(), loadSummary()])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to requeue credit.')
+      setRequeuingCredit(null)
     }
   }
 
@@ -403,6 +416,33 @@ export default function Credits() {
                       </td>
                       <td className="px-6 py-3.5">
                         <div className="flex items-center justify-end gap-1.5">
+                          {credit.status === 'applied' && (
+                            requeuingCredit === credit.id ? (
+                              <span className="flex items-center gap-1">
+                                <span className="text-xs text-gray-500 mr-0.5">Requeue?</span>
+                                <button
+                                  onClick={() => handleRequeue(credit.id)}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                                >
+                                  Yes
+                                </button>
+                                <button
+                                  onClick={() => setRequeuingCredit(null)}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                                >
+                                  No
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setRequeuingCredit(credit.id)}
+                                className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+                                title="Reset to eligible so this credit can be re-applied to QBO"
+                              >
+                                Requeue
+                              </button>
+                            )
+                          )}
                           {credit.status === 'eligible' && (
                             <button
                               onClick={() => openMarkAppliedModal(credit)}

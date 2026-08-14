@@ -201,6 +201,9 @@ export const markCreditApplied = (id, data) =>
 export const restoreCredit = (id) =>
   apiClient.post(`/credits/${id}/restore`).then((r) => r.data)
 
+export const requeueCredit = (id) =>
+  apiClient.post(`/credits/${id}/requeue`).then((r) => r.data)
+
 // ---- Hubstaff ----
 
 export const getHubstaffProjects = () =>
