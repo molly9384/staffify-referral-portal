@@ -108,6 +108,12 @@ export const updateClient = (id, data) =>
 export const getClientReferrals = (id) =>
   apiClient.get(`/clients/${id}/referrals`).then((r) => r.data)
 
+export const archiveClient = (id) =>
+  apiClient.patch(`/clients/${id}/archive`).then((r) => r.data)
+
+export const restoreClient = (id) =>
+  apiClient.patch(`/clients/${id}/restore`).then((r) => r.data)
+
 export const deleteClient = (id) =>
   apiClient.delete(`/clients/${id}`).then((r) => r.data)
 

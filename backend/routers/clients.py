@@ -74,6 +74,38 @@ async def update_client(
     return client
 
 
+@router.patch("/{client_id}/archive", response_model=ClientOut)
+async def archive_client(
+    client_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_owner),
+):
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    client.is_active = False
+    await db.commit()
+    await db.refresh(client)
+    return client
+
+
+@router.patch("/{client_id}/restore", response_model=ClientOut)
+async def restore_client(
+    client_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_owner),
+):
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    client.is_active = True
+    await db.commit()
+    await db.refresh(client)
+    return client
+
+
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_client(
     client_id: uuid.UUID,

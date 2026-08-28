@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getClients, createClient, updateClient, deleteClient, getHubstaffProjects, lookupQBOCustomer } from '../../api/client'
+import { getClients, createClient, updateClient, deleteClient, archiveClient, restoreClient, getHubstaffProjects, lookupQBOCustomer } from '../../api/client'
 import { formatDate } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
 
@@ -11,6 +11,7 @@ export default function Clients() {
   const [showModal, setShowModal] = useState(false)
   const [editingClient, setEditingClient] = useState(null)
   const [deletingClient, setDeletingClient] = useState(null)
+  const [archivingClient, setArchivingClient] = useState(null)
   const [projects, setProjects] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [qboLooking, setQboLooking] = useState(false)
@@ -70,6 +71,32 @@ export default function Clients() {
     setQboStatus(client.qbo_customer_id ? 'found' : '')
     setShowModal(true)
     loadProjects()
+  }
+
+  const handleArchive = async (clientId) => {
+    setSubmitting(true)
+    try {
+      await archiveClient(clientId)
+      setArchivingClient(null)
+      load()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to archive client.')
+      setArchivingClient(null)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleRestore = async (clientId) => {
+    setSubmitting(true)
+    try {
+      await restoreClient(clientId)
+      load()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to restore client.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -233,6 +260,24 @@ export default function Clients() {
                       <button onClick={() => openEdit(client)} className="text-primary-600 hover:text-primary-700 font-medium text-sm">
                         Edit
                       </button>
+                      {isOwner && client.is_active && (
+                        archivingClient === client.id ? (
+                          <span className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 mr-0.5">Archive?</span>
+                            <button onClick={() => handleArchive(client.id)} disabled={submitting} className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors">Yes</button>
+                            <button onClick={() => setArchivingClient(null)} className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">No</button>
+                          </span>
+                        ) : (
+                          <button onClick={() => setArchivingClient(client.id)} className="text-amber-600 hover:text-amber-700 font-medium text-sm">
+                            Archive
+                          </button>
+                        )
+                      )}
+                      {isOwner && !client.is_active && (
+                        <button onClick={() => handleRestore(client.id)} disabled={submitting} className="text-green-600 hover:text-green-700 font-medium text-sm">
+                          Restore
+                        </button>
+                      )}
                       {isOwner && (
                         <button onClick={() => setDeletingClient(client)} className="text-red-500 hover:text-red-700 font-medium text-sm">
                           Delete

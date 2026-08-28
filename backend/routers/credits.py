@@ -502,8 +502,15 @@ async def requeue_credit(
         )
 
     await db.commit()
-    await db.refresh(credit)
-    return credit
+
+    result2 = await db.execute(
+        select(CreditLedger)
+        .where(CreditLedger.id == credit_id)
+        .options(
+            selectinload(CreditLedger.referral).selectinload(Referral.referring_client)
+        )
+    )
+    return result2.scalar_one()
 
 
 @router.post("/sync-vas", response_model=MessageResponse)
